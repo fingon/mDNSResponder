@@ -23,9 +23,6 @@
     Change History (most recent first):
 
 $Log: uds_daemon.c,v $
-Revision 1.22.2.1  2003/12/05 00:03:35  cheshire
-<rdar://problem/3487869> Use buffer size MAX_ESCAPED_DOMAIN_NAME instead of 256
-
 Revision 1.22  2003/08/19 16:03:55  ksekar
 Bug #: <rdar://problem/3380097>: ER: SIGINFO dump should include resolves started by DNSServiceQueryRecord
 Check termination_context for NULL before dereferencing.
@@ -710,7 +707,7 @@ static void handle_resolve_request(request_state *rstate)
     {
     DNSServiceFlags flags;
     uint32_t interfaceIndex;
-    char name[256], regtype[MAX_ESCAPED_DOMAIN_NAME], domain[MAX_ESCAPED_DOMAIN_NAME];  
+    char name[256], regtype[256], domain[256];  
     char *ptr;  // message data pointer
     domainname fqdn;
     resolve_t *srv, *txt;
@@ -739,8 +736,8 @@ static void handle_resolve_request(request_state *rstate)
     mDNSInterfaceID InterfaceID = mDNSPlatformInterfaceIDfromInterfaceIndex(&mDNSStorage, interfaceIndex);
     if (interfaceIndex && !InterfaceID) goto bad_param;
     if (get_string(&ptr, name, 256) < 0 ||
-        get_string(&ptr, regtype, MAX_ESCAPED_DOMAIN_NAME) < 0 ||
-        get_string(&ptr, domain, MAX_ESCAPED_DOMAIN_NAME) < 0)
+        get_string(&ptr, regtype, 256) < 0 ||
+        get_string(&ptr, domain, 256) < 0)
         goto bad_param;
 
     // free memory in rstate since we don't need it anymore
@@ -846,7 +843,7 @@ static void resolve_termination_callback(void *context)
 static void resolve_result_callback(mDNS *const m, DNSQuestion *question, const ResourceRecord *const answer, mDNSBool AddRecord)
 {
     int len = 0;
-    char fullname[MAX_ESCAPED_DOMAIN_NAME], target[MAX_ESCAPED_DOMAIN_NAME];
+    char fullname[MAX_DOMAIN_NAME], target[MAX_DOMAIN_NAME];
     char *data;
     transfer_state result;
     reply_state *rep;
@@ -942,7 +939,7 @@ static mStatus do_question(request_state *rstate, domainname *name, uint32_t ifi
 static void question_result_callback(mDNS *const m, DNSQuestion *question, const ResourceRecord *const answer, mDNSBool AddRecord)
     {
     char *data;
-    char name[MAX_ESCAPED_DOMAIN_NAME];
+    char name[256];
     request_state *req;
     reply_state *rep;
     int len;
@@ -991,7 +988,7 @@ static void handle_browse_request(request_state *request)
     {
     DNSServiceFlags flags;
     uint32_t interfaceIndex;
-    char regtype[MAX_ESCAPED_DOMAIN_NAME], domain[MAX_ESCAPED_DOMAIN_NAME];
+    char regtype[256], domain[256];
     DNSQuestion *q;
     domainname typedn, domdn;
     char *ptr;
@@ -1016,8 +1013,8 @@ static void handle_browse_request(request_state *request)
     ptr = request->msgdata;
     flags = get_flags(&ptr);
     interfaceIndex = get_long(&ptr);
-    if (get_string(&ptr, regtype, MAX_ESCAPED_DOMAIN_NAME) < 0 || 
-        get_string(&ptr, domain, MAX_ESCAPED_DOMAIN_NAME) < 0)
+    if (get_string(&ptr, regtype, 256) < 0 || 
+        get_string(&ptr, domain, 256) < 0)
         goto bad_param;
         
     freeL("handle_browse_request", request->msgbuf);
@@ -1079,7 +1076,7 @@ static void handle_regservice_request(request_state *request)
     {
     DNSServiceFlags flags;
     uint32_t ifi;
-    char name[256], regtype[MAX_ESCAPED_DOMAIN_NAME], domain[MAX_ESCAPED_DOMAIN_NAME], host[MAX_ESCAPED_DOMAIN_NAME];
+    char name[256], regtype[256], domain[256], host[256];
     uint16_t txtlen;
     mDNSIPPort port;
     void *txtdata;
@@ -1109,9 +1106,9 @@ static void handle_regservice_request(request_state *request)
     mDNSInterfaceID InterfaceID = mDNSPlatformInterfaceIDfromInterfaceIndex(&mDNSStorage, ifi);
     if (ifi && !InterfaceID) goto bad_param;
     if (get_string(&ptr, name, 256) < 0 ||
-        get_string(&ptr, regtype, MAX_ESCAPED_DOMAIN_NAME) < 0 || 
-        get_string(&ptr, domain, MAX_ESCAPED_DOMAIN_NAME) < 0 ||
-        get_string(&ptr, host, MAX_ESCAPED_DOMAIN_NAME) < 0)
+        get_string(&ptr, regtype, 256) < 0 || 
+        get_string(&ptr, domain, 256) < 0 ||
+        get_string(&ptr, host, 256) < 0)
         goto bad_param;
         
     port.NotAnInteger = get_short(&ptr);
@@ -1654,7 +1651,7 @@ static void handle_enum_request(request_state *rstate)
 
 static void enum_result_callback(mDNS *const m, DNSQuestion *question, const ResourceRecord *const answer, mDNSBool AddRecord)
     {
-    char domain[MAX_ESCAPED_DOMAIN_NAME];
+    char domain[256];
     domain_enum_t *de = question->QuestionContext;
     DNSServiceFlags flags = 0;
     reply_state *reply;
@@ -1812,9 +1809,7 @@ static mStatus gen_rr_response(domainname *servicename, mDNSInterfaceID id, requ
     int len;
     domainlabel name;
     domainname type, dom;
-	char namestr[MAX_DOMAIN_LABEL+1];		// Unescaped name: up to 63 bytes plus C-string terminating NULL.
-	char typestr[MAX_ESCAPED_DOMAIN_NAME];
-	char domstr [MAX_ESCAPED_DOMAIN_NAME];
+    char namestr[256], typestr[256], domstr[256];
 
     *rep = NULL;
     

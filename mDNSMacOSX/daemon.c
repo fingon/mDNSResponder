@@ -36,26 +36,6 @@
     Change History (most recent first):
 
 $Log: daemon.c,v $
-Revision 1.134.2.6  2004/04/06 19:50:36  cheshire
-<rdar://problem/3605898> mDNSResponder will not launch if "nobody" user doesn't exist.
-After more discussion, we've decided to use userid -2 if "nobody" user doesn't exist.
-
-Revision 1.134.2.5  2004/04/03 01:29:07  cheshire
-<rdar://problem/3605898> mDNSResponder will not launch if "nobody" user doesn't exist.
-If "nobody" user doesn't exist, log a message and continue as "root"
-
-Revision 1.134.2.4  2004/04/02 21:50:21  cheshire
-Fix errors in comments
-
-Revision 1.134.2.3  2003/12/12 01:21:30  cheshire
-<rdar://problem/3491108> mDNSResponder should not run as root
-
-Revision 1.134.2.2  2003/12/05 00:03:35  cheshire
-<rdar://problem/3487869> Use buffer size MAX_ESCAPED_DOMAIN_NAME instead of 256
-
-Revision 1.134.2.1  2003/12/03 11:00:09  cheshire
-Update "mDNSResponderVersion" mechanism to allow dots so we can do mDNSResponder-58.1 for SUPan
-
 Revision 1.134  2003/08/21 20:01:37  cheshire
 <rdar://problem/3387941> Traffic reduction: Detect long-lived Resolve() calls, and report them in syslog
 
@@ -216,7 +196,6 @@ Add $Log header
 #include <unistd.h>
 #include <paths.h>
 #include <fcntl.h>
-#include <pwd.h>
 
 #include "DNSServiceDiscoveryRequestServer.h"
 #include "DNSServiceDiscoveryReply.h"
@@ -285,7 +264,7 @@ struct DNSServiceBrowserResult_struct
 	{
 	DNSServiceBrowserResult *next;
 	int resultType;
-	domainname result;
+	char name[256], type[256], dom[256];
 	};
 
 typedef struct DNSServiceBrowser_struct DNSServiceBrowser;
@@ -590,7 +569,7 @@ mDNSlocal void FoundDomain(mDNS *const m, DNSQuestion *question, const ResourceR
 	{
 	kern_return_t status;
 	#pragma unused(m)
-	char buffer[MAX_ESCAPED_DOMAIN_NAME];
+	char buffer[256];
 	DNSServiceDomainEnumerationReplyResultType rt;
 	DNSServiceDomainEnumeration *x = (DNSServiceDomainEnumeration *)question->QuestionContext;
 
@@ -688,7 +667,9 @@ mDNSlocal void FoundInstance(mDNS *const m, DNSQuestion *question, const Resourc
 	if (!x) { LogMsg("FoundInstance: Failed to allocate memory for result %##s", answer->rdata->u.name.c); return; }
 	
 	verbosedebugf("FoundInstance: %s %##s", AddRecord ? "Add" : "Rmv", answer->rdata->u.name.c);
-	AssignDomainName(x->result, answer->rdata->u.name);
+	ConvertDomainLabelToCString_unescaped(&name, x->name);
+	ConvertDomainNameToCString(&type, x->type);
+	ConvertDomainNameToCString(&domain, x->dom);
 	if (AddRecord)
 		 x->resultType = DNSServiceBrowserReplyAddInstance;
 	else x->resultType = DNSServiceBrowserReplyRemoveInstance;
@@ -1581,17 +1562,8 @@ mDNSlocal mDNSs32 mDNSDaemonIdle(void)
 			while (x->results)
 				{
 				DNSServiceBrowserResult *const r = x->results;
-				domainlabel name;
-				domainname type, domain;
-				DeconstructServiceName(&r->result, &name, &type, &domain);	// Don't need to check result; already validated in FoundInstance()
-				char cname[MAX_DOMAIN_LABEL+1];			// Unescaped name: up to 63 bytes plus C-string terminating NULL.
-				char ctype[MAX_ESCAPED_DOMAIN_NAME];
-				char cdom [MAX_ESCAPED_DOMAIN_NAME];
-				ConvertDomainLabelToCString_unescaped(&name, cname);
-				ConvertDomainNameToCString(&type, ctype);
-				ConvertDomainNameToCString(&domain, cdom);
 				DNSServiceDiscoveryReplyFlags flags = (r->next) ? DNSServiceDiscoverReplyFlagsMoreComing : 0;
-				kern_return_t status = DNSServiceBrowserReply_rpc(x->ClientMachPort, r->resultType, cname, ctype, cdom, flags, 1);
+				kern_return_t status = DNSServiceBrowserReply_rpc(x->ClientMachPort, r->resultType, r->name, r->type, r->dom, flags, 1);
 				// If we failed to send the mach message, try again in one second
 				if (status == MACH_SEND_TIMED_OUT)
 					{
@@ -1639,7 +1611,7 @@ mDNSexport int main(int argc, char **argv)
 	signal(SIGTERM, HandleSIGTERM);
 	signal(SIGINFO, HandleSIGINFO);
 
-	// Register the server with mach_init for automatic restart only during normal (non-debug) mode
+	// Register the server with mach_init for automatic restart only during debug mode
     if (!debug_mode)
 		registerBootstrapService();
 
@@ -1652,7 +1624,7 @@ mDNSexport int main(int argc, char **argv)
 		int fd = open(_PATH_DEVNULL, O_RDWR, 0);
 		if (fd != -1)
 			{
-			// Avoid unnecessarily duplicating a file descriptor to itself
+			// Avoid to unnecessarily duplicate a file descriptor to itself
 			if (fd != STDIN_FILENO) (void)dup2(fd, STDIN_FILENO);
 			if (fd != STDOUT_FILENO) (void)dup2(fd, STDOUT_FILENO);
 			if (fd != STDERR_FILENO) (void)dup2(fd, STDERR_FILENO);
@@ -1670,13 +1642,6 @@ mDNSexport int main(int argc, char **argv)
 	
 	LogMsg("%s starting", mDNSResponderVersionString);
 	status = mDNSDaemonInitialize();
-
-	// Now that we're finished with anything privileged, switch over to running as "nobody"
-	const struct passwd *pw = getpwnam( "nobody");
-	if ( pw != NULL)
-		setuid( pw->pw_uid);
-	else
-		setuid(-2);		// User "nobody" is -2; use that value if "nobody" does not appear in the password database
 
 	if (status == 0)
 		{
@@ -1729,4 +1694,8 @@ mDNSexport int main(int argc, char **argv)
 	}
 
 // For convenience when using the "strings" command, this is the last thing in the file
-mDNSexport const char mDNSResponderVersionString[] = STRINGIFY(mDNSResponderVersion) " (" __DATE__ " " __TIME__ ")";
+#if mDNSResponderVersion > 1
+mDNSexport const char mDNSResponderVersionString[] = "mDNSResponder-" STRINGIFY(mDNSResponderVersion) " (" __DATE__ " " __TIME__ ")";
+#else
+mDNSexport const char mDNSResponderVersionString[] = "mDNSResponder (Engineering Build) (" __DATE__ " " __TIME__ ")";
+#endif
