@@ -26,7 +26,7 @@
 				LIBRARY_SEARCH_PATHS = "\"${OBJROOT}/mDNSResponder.build\"";
 				MACOSX_DEPLOYMENT_TARGET = 10.2;
 				OPTIMIZATION_CFLAGS = "-O0";
-				OTHER_CFLAGS = "-no-cpp-precomp -mdynamic-no-pic -D__MACOSX__ -DmDNSResponderVersion=${MVERS} -DMDNS_DEBUGMSGS=1";
+				OTHER_CFLAGS = "-no-cpp-precomp -mdynamic-no-pic -D__MACOSX__ -DmDNSResponderVersion=${MVERS} -D_LEGACY_NAT_TRAVERSAL_ -DMDNS_DEBUGMSGS=1";
 				OTHER_LDFLAGS = "-ldnsinfo";
 				OTHER_REZFLAGS = "";
 				PRODUCT_NAME = mDNSResponder.debug;
@@ -75,6 +75,7 @@
 				F5E11B5E04A28126019798ED,
 				FFCB6D75075D595E00B8AF62,
 				00AD62B0032D799A0CCA2C71,
+				7FC8F9D606D14E66007E879D,
 				00AD62B1032D799A0CCA2C71,
 			);
 			isa = PBXSourcesBuildPhase;
@@ -271,6 +272,7 @@
 		};
 		08FB7795FE84155DC02AAC07 = {
 			children = (
+				7FC8F9D406D14E66007E879D,
 				7F461DB5062DBF2900672BF3,
 				F525E72804AA167501F1CF4D,
 				F5E11B5A04A28126019798ED,
@@ -331,7 +333,7 @@
 				INSTALL_PATH = /usr/sbin;
 				LIBRARY_SEARCH_PATHS = "\"${OBJROOT}/mDNSResponder.build\"";
 				MACOSX_DEPLOYMENT_TARGET = 10.2;
-				OTHER_CFLAGS = "-no-cpp-precomp -mdynamic-no-pic -D__MACOSX__ -DmDNSResponderVersion=${MVERS}";
+				OTHER_CFLAGS = "-no-cpp-precomp -mdynamic-no-pic -D__MACOSX__ -DmDNSResponderVersion=${MVERS} -D_LEGACY_NAT_TRAVERSAL_";
 				OTHER_LDFLAGS = "-ldnsinfo";
 				OTHER_REZFLAGS = "";
 				PRODUCT_NAME = mDNSResponder;
@@ -372,6 +374,7 @@
 				F5E11B5C04A28126019798ED,
 				FFCB6D74075D539900B8AF62,
 				6575FBED022EAF7200000109,
+				7FC8F9D506D14E66007E879D,
 				6575FBEE022EAF7200000109,
 			);
 			isa = PBXSourcesBuildPhase;
@@ -763,6 +766,24 @@
 			settings = {
 			};
 		};
+		7FC8F9D406D14E66007E879D = {
+			fileEncoding = 4;
+			isa = PBXFileReference;
+			path = LegacyNATTraversal.c;
+			refType = 2;
+		};
+		7FC8F9D506D14E66007E879D = {
+			fileRef = 7FC8F9D406D14E66007E879D;
+			isa = PBXBuildFile;
+			settings = {
+			};
+		};
+		7FC8F9D606D14E66007E879D = {
+			fileRef = 7FC8F9D406D14E66007E879D;
+			isa = PBXBuildFile;
+			settings = {
+			};
+		};
 //7F0
 //7F1
 //7F2
@@ -933,8 +954,7 @@
 				JAVA_ARCHIVE_COMPRESSION = YES;
 				JAVA_ARCHIVE_TYPE = JAR;
 				JAVA_COMPILER_DEBUGGING_SYMBOLS = NO;
-				JAVA_COMPILER_SOURCE_VERSION = 1.4;
-				JAVA_COMPILER_TARGET_VM_VERSION = 1.4;
+				JAVA_COMPILER_TARGET_VM_VERSION = 1.2;
 				JAVA_SOURCE_SUBDIR = .;
 				LIBRARY_STYLE = STATIC;
 				MACOSX_DEPLOYMENT_TARGET = 10.2;
@@ -946,7 +966,6 @@
 				PURE_JAVA = YES;
 				REZ_EXECUTABLE = YES;
 				SECTORDER_FLAGS = "";
-				STRIPFLAGS = "-S";
 				WARNING_CFLAGS = "-Wmost -Wno-four-char-constants -Wno-unknown-pragmas";
 			};
 			comments = "Multiplatform .jar file that implements Java interface to DNS-SD";
@@ -969,7 +988,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -d ${OBJROOT}/mDNSResponder.build/${CONFIGURATION} ]; then BUILD_DIR=${OBJROOT}/mDNSResponder.build/${CONFIGURATION}; else BUILD_DIR=${OBJROOT}/mDNSResponder.build; fi\njavah -force -J-Xbootclasspath/p:${BUILD_DIR}/dns_sd.jar.build/JavaClasses -o ${BUILD_DIR}/dns_sd.jar.build/DNSSD.java.h com.apple.dnssd.AppleDNSSD com.apple.dnssd.AppleBrowser com.apple.dnssd.AppleResolver com.apple.dnssd.AppleRegistration com.apple.dnssd.AppleQuery com.apple.dnssd.AppleDomainEnum com.apple.dnssd.AppleService";
+			shellScript = "if [ -d ${OBJROOT}/mDNSResponder.build/${CONFIGURATION} ]; then BUILD_DIR=${OBJROOT}/mDNSResponder.build/${CONFIGURATION}; else BUILD_DIR=${OBJROOT}/mDNSResponder.build; fi\njavah -force -classpath ${BUILD_DIR}/dns_sd.jar.build/JavaClasses/ -o ${BUILD_DIR}/dns_sd.jar.build/DNSSD.java.h com.apple.dnssd.AppleDNSSD com.apple.dnssd.AppleBrowser com.apple.dnssd.AppleResolver com.apple.dnssd.AppleRegistration com.apple.dnssd.AppleQuery com.apple.dnssd.AppleDomainEnum com.apple.dnssd.AppleService";
 		};
 		DB2CC4560662DE4500335AB3 = {
 			fileRef = DB2CC4430662DD1100335AB3;
@@ -1094,7 +1113,6 @@
 				PRODUCT_NAME = libjdns_sd.jnilib;
 				REZ_EXECUTABLE = YES;
 				SECTORDER_FLAGS = "";
-				STRIPFLAGS = "-S";
 				WARNING_CFLAGS = "-Wmost -Wno-four-char-constants -Wno-unknown-pragmas";
 			};
 			comments = "Platform-specific JNI library that bridges dns_sd.jar to <dns_sd.h>.";
@@ -1658,7 +1676,6 @@
 				PREBINDING = NO;
 				PRODUCT_NAME = Bonjour;
 				SECTORDER_FLAGS = "";
-				STRIPFLAGS = "-S";
 				WARNING_CFLAGS = "-Wmost -Wno-four-char-constants -Wno-unknown-pragmas";
 				WRAPPER_EXTENSION = prefPane;
 			};
@@ -2202,7 +2219,6 @@
 				PRODUCT_NAME = ddnswriteconfig;
 				REZ_EXECUTABLE = YES;
 				SECTORDER_FLAGS = "";
-				STRIPFLAGS = "-S";
 				WARNING_CFLAGS = "-Wmost -Wno-four-char-constants -Wno-unknown-pragmas";
 			};
 			dependencies = (

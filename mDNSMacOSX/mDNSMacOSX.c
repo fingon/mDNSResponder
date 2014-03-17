@@ -24,15 +24,6 @@
     Change History (most recent first):
 
 $Log: mDNSMacOSX.c,v $
-Revision 1.318.2.3  2007/07/18 20:35:42  cheshire
-Bracket LegacyNATInit/LegacyNATDestroy calls with "#ifdef _LEGACY_NAT_TRAVERSAL_"
-
-Revision 1.318.2.2  2006/12/14 21:38:51  cheshire
-Fix problem exposed by previous changes: kSecAccountItemAttr is not necessarily nul-terminated
-
-Revision 1.318.2.1  2006/10/31 02:37:04  cheshire
-<rdar://problem/4779534> Stop creating HINFO records
-
 Revision 1.318  2005/10/20 00:10:34  cheshire
 <rdar://problem/4290265> Add check to avoid crashing NAT gateways that have buggy DNS relay code
 
@@ -545,10 +536,10 @@ Revision 1.161  2004/08/11 00:17:46  ksekar
 set default bit for their domains
 
 Revision 1.160  2004/07/29 19:27:16  ksekar
-NAT-PMP Support - minor fixes and cleanup
+NATPMP Support - minor fixes and cleanup
 
 Revision 1.159  2004/07/26 22:49:31  ksekar
-<rdar://problem/3651409>: Feature #9516: Need support for NAT-PMP in client
+<rdar://problem/3651409>: Feature #9516: Need support for NATPMP in client
 
 Revision 1.158  2004/07/13 21:24:24  rpantos
 Fix for <rdar://problem/3701120>.
@@ -974,12 +965,6 @@ Minor code tidying
 // For debugging, set LIST_ALL_INTERFACES to 1 to display all found interfaces,
 // including ones that mDNSResponder chooses not to use.
 #define LIST_ALL_INTERFACES 0
-
-// For debugging, being able to identify software versions is useful.
-// Some people are concerned that this information could be exploited by hackers.
-// I'm not totally convinced by that argument, but we don't want to cause our users distress,
-// so for shipping code, define "NO_HINFO" to suppress the generation of HINFO records. -- SC
-#define NO_HINFO 1
 
 // For enabling AAAA records over IPv4. Setting this to 0 sends only
 // A records over IPv4 and AAAA over IPv6. Setting this to 1 sends both
@@ -2949,8 +2934,7 @@ mDNSlocal void SetSecretForDomain(mDNS *m, const domainname *domain)
 				if (attr.tag == kSecAccountItemAttr)
 					{
 					if (!attr.length || attr.length > MAX_ESCAPED_DOMAIN_NAME) { LogMsg("SetSecretForDomain - Bad key length %d", attr.length); goto cleanup; }					
-					memcpy(keybuf, attr.data, attr.length);
-					keybuf[attr.length] = 0;
+					strncpy(keybuf, attr.data, attr.length);
 					if (!MakeDomainNameFromDNSNameString(&keyname, keybuf)) { LogMsg("SetSecretForDomain - bad key %s", keybuf); goto cleanup; }
 					debugf("Setting shared secret for zone %s with key %##s", dstring, keyname.c);
 					mDNS_SetSecretForZone(m, d, &keyname, secret);
@@ -3000,9 +2984,7 @@ mDNSlocal void SetSCPrefsBrowseDomainsFromCFArray(mDNS *m, CFArrayRef browseDoma
 
 mDNSlocal void DynDNSConfigChanged(mDNS *const m)
 	{
-#ifdef _LEGACY_NAT_TRAVERSAL_
 	static mDNSBool LegacyNATInitialized = mDNSfalse;
-#endif _LEGACY_NAT_TRAVERSAL_
 	uDNS_GlobalInfo *u = &m->uDNS_info;
 	CFDictionaryRef dict;
 	CFStringRef     key;
@@ -3155,7 +3137,6 @@ mDNSlocal void DynDNSConfigChanged(mDNS *const m)
 				memcmp(v6.ip.v6.b, u->AdvertisedV6.ip.v6.b, 16)             ||
 				r.ip.v4.NotAnInteger != u->Router.ip.v4.NotAnInteger)
 				{
-#ifdef _LEGACY_NAT_TRAVERSAL_
 				if (LegacyNATInitialized) { LegacyNATDestroy(); LegacyNATInitialized = mDNSfalse; }
 				if (r.ip.v4.NotAnInteger && IsPrivateV4Addr(&v4))
 					{
@@ -3163,7 +3144,6 @@ mDNSlocal void DynDNSConfigChanged(mDNS *const m)
 					if (err)  LogMsg("ERROR: LegacyNATInit");
 					else LegacyNATInitialized = mDNStrue;
 					}					
-#endif _LEGACY_NAT_TRAVERSAL_
 				mDNS_SetPrimaryInterfaceInfo(m, &v4, v6.ip.v6.b[0] ? &v6 : NULL, r.ip.v4.NotAnInteger ? &r : NULL);
 				}
 			}
@@ -3537,7 +3517,6 @@ mDNSlocal mStatus mDNSPlatformInit_setup(mDNS *const m)
 	if (mDNSMacOSXSystemBuildNumber(HINFO_SWstring) < 7) m->KnownBugs |= mDNS_KnownBug_PhantomInterfaces;
 	if (mDNSPlatformInit_CanReceiveUnicast())            m->CanReceiveUnicastOn5353 = mDNStrue;
 
-#ifndef NO_HINFO
 	mDNSu32 hlen = mDNSPlatformStrLen(HINFO_HWstring);
 	mDNSu32 slen = mDNSPlatformStrLen(HINFO_SWstring);
 	if (hlen + slen < 254)
@@ -3547,7 +3526,6 @@ mDNSlocal mStatus mDNSPlatformInit_setup(mDNS *const m)
 		mDNSPlatformMemCopy(HINFO_HWstring, &m->HIHardware.c[1], hlen);
 		mDNSPlatformMemCopy(HINFO_SWstring, &m->HISoftware.c[1], slen);
 		}
-#endif /* NO_HINFO */
 
  	m->p->unicastsockets.m     = m;
 	m->p->unicastsockets.info  = NULL;

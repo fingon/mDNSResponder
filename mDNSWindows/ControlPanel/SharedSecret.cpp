@@ -128,7 +128,7 @@ CSharedSecret::Commit( CString zone )
 		m_key += '.';
 	}
 
-	// <rdar://problem/4192119>
+	// <rdar://problem/ >
 	//
 	// Prepend "$" to the key name, so that there will
 	// be no conflict between the zone name and the key
