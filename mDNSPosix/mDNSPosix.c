@@ -784,6 +784,17 @@ mDNSlocal int SetupSocket(struct sockaddr *intfAddr, mDNSIPPort port, int interf
             if (err < 0) { err = errno; perror("setsockopt - IPV6_MULTICAST_HOPS"); }
         }
 
+#ifdef __linux__
+#ifdef SO_BINDTODEVICE
+        if (err == 0)
+        {
+            char ifname[IFNAMSIZ];
+            if (if_indextoname(interfaceIndex, ifname))
+                err = setsockopt(*sktPtr, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
+        }
+#endif /* SO_BINDTODEVICE */
+#endif /* __linux__ */
+
         // And start listening for packets
         if (err == 0)
         {
