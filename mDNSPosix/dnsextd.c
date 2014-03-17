@@ -2,28 +2,28 @@
  *
  * Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
 
 $Log: dnsextd.c,v $
-Revision 1.33.2.2  2006/08/29 06:24:34  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.33.2.1  2005/08/05 21:14:00  ksekar
-<rdar://problem/4012279> Long-lived queries not working on windows
-Change constant names
-
 Revision 1.33  2005/03/11 19:09:02  ksekar
 Fixed ZERO_LLQID macro
 
@@ -529,7 +529,7 @@ mDNSlocal mDNSs32 GetPktLease(PktMsg *pkt)
 			if (!ptr) { Log("Unable to read additional record"); break; }
 			if (lcr.r.resrec.rrtype == kDNSType_OPT)
 				{
-				if (lcr.r.resrec.rdlength < LEASE_OPT_RDLEN) continue;
+				if (lcr.r.resrec.rdlength < LEASE_OPT_SIZE) continue;
 				if (lcr.r.resrec.rdata->u.opt.opt != kDNSOpt_Lease) continue;
 				lease = (mDNSs32)lcr.r.resrec.rdata->u.opt.OptData.lease;
 				break;
@@ -1184,8 +1184,8 @@ mDNSlocal void FormatLLQOpt(AuthRecord *opt, int opcode, mDNSu8 *id, mDNSs32 lea
 	{
 	bzero(opt, sizeof(*opt));
 	mDNS_SetupResourceRecord(opt, mDNSNULL, mDNSInterface_Any, kDNSType_OPT, kStandardTTL, kDNSRecordTypeKnownUnique, mDNSNULL, mDNSNULL);
-	opt->resrec.rdlength = LLQ_OPT_RDLEN;
-	opt->resrec.rdestimate = LLQ_OPT_RDLEN;
+	opt->resrec.rdlength = LLQ_OPT_SIZE;
+	opt->resrec.rdestimate = LLQ_OPT_SIZE;
 	opt->resrec.rdata->u.opt.opt = kDNSOpt_LLQ;
 	opt->resrec.rdata->u.opt.optlen = sizeof(LLQOptData);
 	opt->resrec.rdata->u.opt.OptData.llq.vers = kLLQ_Vers;
@@ -1832,7 +1832,7 @@ mDNSlocal int RecvLLQ(DaemonInfo *d, PktMsg *pkt)
 
 	// validate OPT
 	if (opt.r.resrec.rrtype != kDNSType_OPT) { Log("Malformatted LLQ from %s: last Additional not an Opt RR", addr); goto end; }
-	if (opt.r.resrec.rdlength < pkt->msg.h.numQuestions * LLQ_OPT_RDLEN) { Log("Malformatted LLQ from %s: Opt RR to small (%d bytes for %d questions)", addr, opt.r.resrec.rdlength, pkt->msg.h.numQuestions); }
+	if (opt.r.resrec.rdlength < pkt->msg.h.numQuestions * LLQ_OPT_SIZE) { Log("Malformatted LLQ from %s: Opt RR to small (%d bytes for %d questions)", addr, opt.r.resrec.rdlength, pkt->msg.h.numQuestions); }
 	
 	// dispatch each question
 	for (i = 0; i < pkt->msg.h.numQuestions; i++)
@@ -1880,7 +1880,7 @@ mDNSlocal mDNSBool IsLLQRequest(PktMsg *pkt)
 		}
 	
 	if (lcr.r.resrec.rrtype == kDNSType_OPT &&
-		lcr.r.resrec.rdlength >= LLQ_OPT_RDLEN &&
+		lcr.r.resrec.rdlength >= LLQ_OPT_SIZE &&
 		lcr.r.resrec.rdata->u.opt.opt == kDNSOpt_LLQ)
 		{ result = mDNStrue; goto end; }
 

@@ -1,32 +1,28 @@
-/* -*- Mode: C; tab-width: 4 -*-
- *
+/*
  * Copyright (c) 2002-2003 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
 
 $Log: uDNS.h,v $
-Revision 1.32.2.1  2006/08/29 06:24:23  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.32  2005/07/29 19:46:10  ksekar
-<rdar://problem/4191860> reduce polling period on failed LLQs to 15 minutes
-
-Revision 1.31  2005/03/31 02:19:56  cheshire
-<rdar://problem/4021486> Fix build warnings
-Reviewed by: Scott Herscher
-
 Revision 1.30  2005/03/04 03:00:03  ksekar
 <rdar://problem/4026546> Retransmissions happen too early, causing registrations to conflict with themselves
 
@@ -140,7 +136,6 @@ Revision 1.1  2003/12/13 03:05:27  ksekar
 #define INIT_UCAST_POLL_INTERVAL (3 * mDNSPlatformOneSecond) // this interval is used after send failures on network transitions
 	                                                         // which typically heal quickly, so we start agressively and exponentially back off
 #define MAX_UCAST_POLL_INTERVAL (60 * 60 * mDNSPlatformOneSecond)
-#define LLQ_POLL_INTERVAL       (15 * 60 * mDNSPlatformOneSecond) // Polling interval for zones w/ an advertised LLQ port (ie not static zones) if LLQ fails due to NAT, etc.
 #define RESPONSE_WINDOW (60 * mDNSPlatformOneSecond)         // require server responses within one minute of request
 #define UPDATE_PORT_NAME "_dns-update._udp."
 #define LLQ_PORT_NAME "_dns-llq._udp"
@@ -152,9 +147,9 @@ extern mStatus uDNS_StartQuery(mDNS *const m, DNSQuestion *const question);
 extern mDNSBool uDNS_IsActiveQuery(DNSQuestion *const question, uDNS_GlobalInfo *u);  // returns true if OK to call StopQuery
 extern mStatus uDNS_StopQuery(mDNS *const m, DNSQuestion *const question);
 	
-extern void uDNS_Init(mDNS *const m);
-extern void uDNS_Sleep(mDNS *const m);
-extern void uDNS_Wake(mDNS *const m);
+extern void uDNS_Init(mDNS *m);
+extern void uDNS_Sleep(mDNS *m);
+extern void uDNS_Wake(mDNS *m);
 #define uDNS_Close uDNS_Sleep
 	
 // uDNS_UpdateRecord

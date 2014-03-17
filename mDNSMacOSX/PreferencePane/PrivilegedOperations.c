@@ -41,21 +41,7 @@
     ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     Change History (most recent first):
-
 $Log: PrivilegedOperations.c,v $
-Revision 1.6  2006/08/14 23:15:47  cheshire
-Tidy up Change History comment
-
-Revision 1.5  2006/06/10 02:07:11  mkrochma
-Whoa.  Make sure code compiles before checking it in.
-
-Revision 1.4  2006/05/27 02:32:38  mkrochma
-Wait for installer script to exit before returning result
-
-Revision 1.3  2005/06/04 04:50:00  cheshire
-<rdar://problem/4138070> ddnswriteconfig (Bonjour PreferencePane) vulnerability
-Use installtool instead of requiring ddnswriteconfig to self-install
-
 Revision 1.2  2005/02/10 22:35:20  cheshire
 <rdar://problem/3727944> Update name
 
@@ -102,8 +88,7 @@ OSStatus EnsureToolInstalled(void)
 	int				status;
 	OSStatus		err = noErr;
 	const char		*args[] = { kToolPath, "0", "V", NULL };
-	char			toolSourcePath[PATH_MAX] = {};
-	char			toolInstallerPath[PATH_MAX] = {};
+	char			toolPath[PATH_MAX] = {};
 
 	if (gToolApproved) 
 		return noErr;
@@ -121,17 +106,15 @@ OSStatus EnsureToolInstalled(void)
 	bundleURL = CFBundleCopyBundleURL(CFBundleGetBundleWithIdentifier(CFSTR("com.apple.preference.bonjour")) );
 	if (bundleURL != NULL)
 	{
-		CFURLGetFileSystemRepresentation(bundleURL, false, (UInt8*) toolSourcePath, sizeof toolSourcePath);
-		if (strlcat(toolSourcePath,    "/Contents/Resources/" kToolName,      sizeof toolSourcePath   ) >= sizeof toolSourcePath   ) return(-1);
-		CFURLGetFileSystemRepresentation(bundleURL, false, (UInt8*) toolInstallerPath, sizeof toolInstallerPath);
-		if (strlcat(toolInstallerPath, "/Contents/Resources/" kToolInstaller, sizeof toolInstallerPath) >= sizeof toolInstallerPath) return(-1);
+		CFURLGetFileSystemRepresentation(bundleURL, false, (UInt8*) toolPath, sizeof toolPath);
+		strcat(toolPath, "/Contents/Resources/" kToolName);
 	}
 	else
 		return coreFoundationUnknownErr;
 	
 	// Obtain authorization and run in-bundle copy as root to install it
 	{
-		AuthorizationItem		aewpRight = { kAuthorizationRightExecute, strlen(toolInstallerPath), toolInstallerPath, 0 };
+		AuthorizationItem		aewpRight = { kAuthorizationRightExecute, strlen(toolPath), toolPath, 0 };
 		AuthorizationItemSet	rights = { 1, &aewpRight };
 		AuthorizationRef		authRef;
 		
@@ -140,20 +123,10 @@ OSStatus EnsureToolInstalled(void)
 					kAuthorizationFlagPreAuthorize, &authRef);
 		if (err == noErr)
 		{
-			char *installerargs[] = { toolSourcePath, NULL };
-			err = AuthorizationExecuteWithPrivileges(authRef, toolInstallerPath, 0, installerargs, (FILE**) NULL);
-			if (err == noErr) {
-				int status;
-				int pid = wait(&status);
-				if (pid > 0 && WIFEXITED(status)) {
-					err = WEXITSTATUS(status);
-					if (err == noErr) {
-						gToolApproved = true;
-					}
-				} else {
-					err = -1;
-				}
-			}
+			args[2] = "I";
+			err = AuthorizationExecuteWithPrivileges(authRef, toolPath, 0, (char * const *)&args[1], (FILE**) NULL);
+			if (err == noErr)
+				gToolApproved = true;
 			(void) AuthorizationFree(authRef, kAuthorizationFlagDestroyRights);
 		}
 	}

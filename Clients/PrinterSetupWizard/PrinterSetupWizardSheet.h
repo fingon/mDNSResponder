@@ -1,34 +1,28 @@
-/* -*- Mode: C; tab-width: 4 -*-
- *
+/*
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
     
 $Log: PrinterSetupWizardSheet.h,v $
-Revision 1.12  2006/08/14 23:24:09  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.11  2005/10/05 17:32:51  herscher
-<rdar://problem/4141221> Use a case insensitive compare operation to check whether a printer with the same name has already been installed.
-
-Revision 1.10  2005/07/07 17:53:19  shersche
-Fix problems associated with the CUPS printer workaround fix.
-
-Revision 1.9  2005/04/13 17:46:22  shersche
-<rdar://problem/4082122> Generic PCL not selected when printers advertise multiple text records
-
 Revision 1.8  2005/02/08 18:53:33  shersche
 Remove qtotalDefined parameter from ParseTextRecord()
 
@@ -91,12 +85,6 @@ public:
 
 	CPrinterSetupWizardSheet(UINT nIDCaption, CWnd* pParentWnd = NULL, UINT iSelectPage = 0);
 	virtual ~CPrinterSetupWizardSheet();
-
-	CPropertyPage*
-	GetLastPage();
-
-	void
-	SetLastPage(CPropertyPage * page );
 
 	void
 	SetSelectedPrinter(Printer * printer);
@@ -253,7 +241,7 @@ private:
 	StopResolve( Service * service );
 
 	OSStatus
-	ParseTextRecord( Service * service, Queue * q, uint16_t inTXTSize, const char * inTXT );
+	ParseTextRecord( Service * service, uint16_t inTXTSize, const char * inTXT, CString & qname, uint32_t & qpriority );
 
 	OSStatus
 	LoadPrinterNames();
@@ -273,10 +261,10 @@ private:
 	static unsigned WINAPI
 	InstallDriverThread( LPVOID inParam );
 
-	typedef std::list<CString>			PrinterNames;
+	typedef std::map<CString,CString>	PrinterNameMap;
 	typedef std::list<DNSServiceRef>	ServiceRefList;
 	static CPrinterSetupWizardSheet	*	m_self;
-	PrinterNames						m_printerNames;
+	PrinterNameMap						m_printerNames;
 	Printer							*	m_selectedPrinter;
 	bool								m_driverThreadFinished;
 	DWORD								m_driverThreadExitCode;
@@ -285,8 +273,6 @@ private:
 	DNSServiceRef						m_lprBrowser;
 	DNSServiceRef						m_ippBrowser;
 	DNSServiceRef						m_resolver;
-
-	CPropertyPage					*	m_lastPage;
 };
 
 
@@ -301,20 +287,6 @@ inline HCURSOR
 CPrinterSetupWizardSheet::GetCursor()
 {
 	return m_active;
-}
-
-
-inline CPropertyPage*
-CPrinterSetupWizardSheet::GetLastPage()
-{
-	return m_lastPage;
-}
-
-
-inline void
-CPrinterSetupWizardSheet::SetLastPage(CPropertyPage * lastPage)
-{
-	m_lastPage = lastPage;
 }
 
 

@@ -1,7 +1,7 @@
-<?xml version="1.0" encoding="Windows-1252"?>
+<?xml version="1.0" encoding = "Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="7.10"
+	Version="7.00"
 	Name="DLL.NET"
 	ProjectGUID="{9C6701E2-82B7-44B7-9B5E-3897D9153F79}"
 	Keyword="ManagedCProj">
@@ -55,13 +55,7 @@
 			<Tool
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
-				Name="VCXMLDataGeneratorTool"/>
-			<Tool
 				Name="VCWebDeploymentTool"/>
-			<Tool
-				Name="VCManagedWrapperGeneratorTool"/>
-			<Tool
-				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
@@ -106,17 +100,9 @@
 			<Tool
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
-				Name="VCXMLDataGeneratorTool"/>
-			<Tool
 				Name="VCWebDeploymentTool"/>
-			<Tool
-				Name="VCManagedWrapperGeneratorTool"/>
-			<Tool
-				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
 		</Configuration>
 	</Configurations>
-	<References>
-	</References>
 	<Files>
 		<Filter
 			Name="Source Files"
@@ -126,10 +112,10 @@
 				RelativePath=".\AssemblyInfo.cpp">
 			</File>
 			<File
-				RelativePath=".\dnssd_NET.cpp">
+				RelativePath=".\Stdafx.cpp">
 			</File>
 			<File
-				RelativePath=".\Stdafx.cpp">
+				RelativePath=".\dnssd_NET.cpp">
 			</File>
 		</Filter>
 		<Filter
@@ -137,16 +123,16 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
 			<File
-				RelativePath=".\dnssd_NET.h">
-			</File>
-			<File
 				RelativePath="PString.h">
 			</File>
 			<File
-				RelativePath=".\resource.h">
+				RelativePath=".\Stdafx.h">
 			</File>
 			<File
-				RelativePath=".\Stdafx.h">
+				RelativePath=".\dnssd_NET.h">
+			</File>
+			<File
+				RelativePath=".\resource.h">
 			</File>
 		</Filter>
 		<Filter

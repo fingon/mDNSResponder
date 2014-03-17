@@ -1,31 +1,28 @@
-/* -*- Mode: C; tab-width: 4 -*-
- *
+/*
  * Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
 
 $Log: SharedSecret.cpp,v $
-Revision 1.5  2006/08/14 23:25:28  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.4  2005/10/18 06:13:41  herscher
-<rdar://problem/4192119> Prepend "$" to key name to ensure that secure updates work if the domain name and key name are the same
-
-Revision 1.3  2005/04/06 02:04:49  shersche
-<rdar://problem/4066485> Registering with shared secret doesn't work
-
 Revision 1.2  2005/03/03 19:55:22  shersche
 <rdar://problem/4034481> ControlPanel source code isn't saving CVS log info
 
@@ -64,8 +61,8 @@ IMPLEMENT_DYNAMIC(CSharedSecret, CDialog)
 
 CSharedSecret::CSharedSecret(CWnd* pParent /*=NULL*/)
 	: CDialog(CSharedSecret::IDD, pParent)
-	, m_key(_T(""))
 	, m_secret(_T(""))
+	, m_secretName(_T(""))
 {
 }
 
@@ -86,8 +83,8 @@ CSharedSecret::~CSharedSecret()
 void CSharedSecret::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
-	DDX_Text(pDX, IDC_KEY, m_key );
-	DDX_Text(pDX, IDC_SECRET, m_secret );
+	DDX_Text(pDX, IDC_SECRET, m_secret);
+	DDX_Text(pDX, IDC_SECRET_NAME, m_secretName);
 }
 
 
@@ -101,41 +98,27 @@ END_MESSAGE_MAP()
 //---------------------------------------------------------------------------------------------------------------------------
 
 void
-CSharedSecret::Commit( CString zone )
+CSharedSecret::Commit()
 {
 	LSA_OBJECT_ATTRIBUTES	attrs;
 	LSA_HANDLE				handle = NULL;
 	NTSTATUS				res;
-	LSA_UNICODE_STRING		lucZoneName;
 	LSA_UNICODE_STRING		lucKeyName;
-	LSA_UNICODE_STRING		lucSecretName;
+	LSA_UNICODE_STRING		lucPrivateData;
 	BOOL					ok;
 	OSStatus				err;
 
 	// If there isn't a trailing dot, add one because the mDNSResponder
 	// presents names with the trailing dot.
 
-	if ( zone.ReverseFind( '.' ) != zone.GetLength() )
+	if ( m_secretName.ReverseFind( '.' ) != m_secretName.GetLength() )
 	{
-		zone += '.';
+		m_secretName += '.';
 	}
-
-	if ( m_key.ReverseFind( '.' ) != m_key.GetLength() )
-	{
-		m_key += '.';
-	}
-
-	// <rdar://problem/4192119>
-	//
-	// Prepend "$" to the key name, so that there will
-	// be no conflict between the zone name and the key
-	// name
-
-	m_key.Insert( 0, L"$" );
 
 	// attrs are reserved, so initialize to zeroes.
 
-	ZeroMemory( &attrs, sizeof( attrs ) );
+	ZeroMemory(&attrs, sizeof( attrs ) );
 
 	// Get a handle to the Policy object on the local system
 
@@ -145,25 +128,17 @@ CSharedSecret::Commit( CString zone )
 
 	// Intializing PLSA_UNICODE_STRING structures
 
-	ok = InitLsaString( &lucZoneName, zone );
-	err = translate_errno( ok, errno_compat(), kUnknownErr );
-	require_noerr( err, exit );
- 
-	ok = InitLsaString( &lucKeyName, m_key );
+	ok = InitLsaString( &lucKeyName, m_secretName );
 	err = translate_errno( ok, errno_compat(), kUnknownErr );
 	require_noerr( err, exit );
 
-	ok = InitLsaString( &lucSecretName, m_secret );
+	ok = InitLsaString( &lucPrivateData, m_secret );
 	err = translate_errno( ok, errno_compat(), kUnknownErr );
 	require_noerr( err, exit );
 
 	// Store the private data.
 
-	res = LsaStorePrivateData( handle, &lucZoneName, &lucKeyName );
-	err = translate_errno( res == 0, LsaNtStatusToWinError( res ), kUnknownErr );
-	require_noerr( err, exit );
-
-	res = LsaStorePrivateData( handle, &lucKeyName, &lucSecretName );
+	res = LsaStorePrivateData( handle, &lucKeyName, &lucPrivateData );
 	err = translate_errno( res == 0, LsaNtStatusToWinError( res ), kUnknownErr );
 	require_noerr( err, exit );
 

@@ -1,7 +1,7 @@
-<?xml version="1.0" encoding="Windows-1252"?>
+<?xml version="1.0" encoding = "Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="7.10"
+	Version="7.00"
 	Name="ControlPanel"
 	SccProjectName=""
 	SccLocalPath=""
@@ -71,13 +71,7 @@
 			<Tool
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
-				Name="VCXMLDataGeneratorTool"/>
-			<Tool
 				Name="VCWebDeploymentTool"/>
-			<Tool
-				Name="VCManagedWrapperGeneratorTool"/>
-			<Tool
-				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
@@ -137,17 +131,9 @@
 			<Tool
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
-				Name="VCXMLDataGeneratorTool"/>
-			<Tool
 				Name="VCWebDeploymentTool"/>
-			<Tool
-				Name="VCManagedWrapperGeneratorTool"/>
-			<Tool
-				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
 		</Configuration>
 	</Configurations>
-	<References>
-	</References>
 	<Files>
 		<Filter
 			Name="Source Files"
@@ -244,6 +230,9 @@
 				RelativePath="SharedSecret.cpp">
 			</File>
 			<File
+				RelativePath="ThirdPage.cpp">
+			</File>
+			<File
 				RelativePath="stdafx.cpp">
 				<FileConfiguration
 					Name="Debug|Win32">
@@ -261,9 +250,6 @@
 						PreprocessorDefinitions=""
 						UsePrecompiledHeader="0"/>
 				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="ThirdPage.cpp">
 			</File>
 		</Filter>
 		<Filter
@@ -294,26 +280,26 @@
 				RelativePath="SharedSecret.h">
 			</File>
 			<File
-				RelativePath="stdafx.h">
+				RelativePath="ThirdPage.h">
 			</File>
 			<File
-				RelativePath="ThirdPage.h">
+				RelativePath="stdafx.h">
 			</File>
 		</Filter>
 		<Filter
 			Name="Resource Files"
 			Filter="ico;cur;bmp;dlg;rc2;rct;bin;cnt;rtf;gif;jpg;jpeg;jpe">
 			<File
-				RelativePath="res\configurator.ico">
-			</File>
-			<File
-				RelativePath="res\controlpanel.ico">
-			</File>
-			<File
 				RelativePath="ControlPanel.rc">
 			</File>
 			<File
 				RelativePath="res\ControlPanel.rc2">
+			</File>
+			<File
+				RelativePath="res\configurator.ico">
+			</File>
+			<File
+				RelativePath="res\controlpanel.ico">
 			</File>
 			<File
 				RelativePath="res\failure.ico">
@@ -332,13 +318,13 @@
 				RelativePath="..\DebugServices.h">
 			</File>
 			<File
-				RelativePath="..\..\mDNSShared\dns_sd.h">
-			</File>
-			<File
 				RelativePath="..\WinServices.cpp">
 			</File>
 			<File
 				RelativePath="..\WinServices.h">
+			</File>
+			<File
+				RelativePath="..\..\mDNSShared\dns_sd.h">
 			</File>
 		</Filter>
 	</Files>
