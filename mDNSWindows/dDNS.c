@@ -22,10 +22,16 @@
 
     Change History (most recent first):
 
+$Log: dDNS.c,v $
+Revision 1.6  2005/03/23 05:54:48  cheshire
+<rdar://problem/4021486> Fix build warnings
+Fix %s where it should be %##s in debugf & LogMsg calls
+
 */
 
 #include "dDNS.h"
 #include "DNSCommon.h"
+#include "uds_daemon.h"
 #include <winsock2.h>
 #include <iphlpapi.h>
 #include <ws2tcpip.h>
@@ -49,9 +55,9 @@ static DNameListElem *DefBrowseList = mDNSNULL;    // cache of answers to above 
 static DNameListElem *DefRegList = mDNSNULL;       // manually generated list of domains where we register for empty string registrations
 static ARListElem *SCPrefBrowseDomains = mDNSNULL; // manually generated local-only PTR records for browse domains we get from SCPreferences
 
-static domainname dDNSRegDomain;             // Default wide-area zone for service registration
-static domainname dDNSBrowseDomain;          // Default wide-area zone for legacy ("empty string") browses
-static domainname dDNSHostname;
+static domainname			dDNSRegDomain;             // Default wide-area zone for service registration
+static DNameListElem	*	dDNSBrowseDomains;         // Default wide-area zone for legacy ("empty string") browses
+static domainname			dDNSHostname;
 
 
 mStatus dDNS_SetupAddr(mDNSAddr *ip, const struct sockaddr *const sa)
@@ -166,7 +172,7 @@ mDNSlocal void FoundDomain(mDNS *const m, DNSQuestion *question, const ResourceR
 			{
 			if (SameDomainName(&ptr->ar.resrec.rdata->u.name, &answer->rdata->u.name))
 				{
-				debugf("Deregistering PTR %s -> %s", ptr->ar.resrec.name->c, ptr->ar.resrec.rdata->u.name.c);
+				debugf("Deregistering PTR %##s -> %##s", ptr->ar.resrec.name->c, ptr->ar.resrec.rdata->u.name.c);
                 dereg = &ptr->ar;
 				if (prev) prev->next = ptr->next;
 				else slElem->AuthRecs = ptr->next;
@@ -271,7 +277,7 @@ mDNSlocal void FoundDefBrowseDomain(mDNS *const m, DNSQuestion *question, const 
 			prev = ptr;
 			ptr = ptr->next;
 			}
-		LogMsg("FoundDefBrowseDomain: Got remove event for domain %s not in list", answer->rdata->u.name.c);
+		LogMsg("FoundDefBrowseDomain: Got remove event for domain %##s not in list", answer->rdata->u.name.c);
 		}
 	}
 
@@ -359,7 +365,7 @@ mDNSlocal mStatus RegisterSearchDomains( mDNS *const m )
 				{
 				AuthRecord *dereg = &arList->ar;
 				arList = arList->next;
-				debugf("Deregistering PTR %s -> %s", dereg->resrec.name->c, dereg->resrec.rdata->u.name.c);
+				debugf("Deregistering PTR %##s -> %##s", dereg->resrec.name->c, dereg->resrec.rdata->u.name.c);
 				err = mDNS_Deregister(m, dereg);
 				if (err) LogMsg("ERROR: RegisterSearchDomains mDNS_Deregister returned %d", err);
 				}
@@ -401,68 +407,96 @@ mDNSlocal mStatus RegisterSearchDomains( mDNS *const m )
 	return mStatus_NoError;
 	}
 
+
+mDNSlocal void RegisterBrowseDomainPTR(mDNS *m, const domainname *d, int type)
+	{
+	// allocate/register legacy and non-legacy _browse PTR record
+	mStatus err;
+	ARListElem *browse = mallocL("ARListElem", sizeof(*browse));
+	mDNS_SetupResourceRecord(&browse->ar, mDNSNULL, mDNSInterface_LocalOnly, kDNSType_PTR, 7200,  kDNSRecordTypeShared, FreeARElemCallback, browse);
+	MakeDomainNameFromDNSNameString(browse->ar.resrec.name, mDNS_DomainTypeNames[type]);
+	AppendDNSNameString            (browse->ar.resrec.name, "local");
+	AssignDomainName(&browse->ar.resrec.rdata->u.name, d);
+	err = mDNS_Register(m, &browse->ar);
+	if (err)
+		{
+		LogMsg("SetSCPrefsBrowseDomain: mDNS_Register returned error %d", err);
+		freeL("ARListElem", browse);
+		}
+	else
+		{
+		browse->next = SCPrefBrowseDomains;
+		SCPrefBrowseDomains = browse;
+		}
+	}
+
+mDNSlocal void DeregisterBrowseDomainPTR(mDNS *m, const domainname *d, int type)
+	{
+	ARListElem *remove, **ptr = &SCPrefBrowseDomains;
+	domainname lhs; // left-hand side of PTR, for comparison
+	
+	MakeDomainNameFromDNSNameString(&lhs, mDNS_DomainTypeNames[type]);
+	AppendDNSNameString            (&lhs, "local");
+
+	while (*ptr)
+		{
+		if (SameDomainName(&(*ptr)->ar.resrec.rdata->u.name, d) && SameDomainName((*ptr)->ar.resrec.name, &lhs))
+			{
+			remove = *ptr;
+			*ptr = (*ptr)->next;
+			mDNS_Deregister(m, &remove->ar);
+			return;
+			}
+		else ptr = &(*ptr)->next;
+		}
+	}
+
 // Add or remove a user-specified domain to the list of empty-string browse domains
 // Also register a non-legacy _browse PTR record so that the domain appears in enumeration lists
 mDNSlocal void SetSCPrefsBrowseDomain(mDNS *m, const domainname *d, mDNSBool add)
 	{
-	AuthRecord rec;
-
 	LogMsg("%s default browse domain %##s", add ? "Adding" : "Removing", d->c);
 	
-	// Create dummy  record pointing to the domain to be added/removed
-	mDNS_SetupResourceRecord(&rec, mDNSNULL, mDNSInterface_LocalOnly, kDNSType_PTR, 7200, kDNSRecordTypeShared, mDNSNULL, mDNSNULL);
-	AssignDomainName(&rec.resrec.rdata->u.name, d);
-
-	// add/remove the "_legacy" entry
-	MakeDomainNameFromDNSNameString(rec.resrec.name, mDNS_DomainTypeNames[mDNS_DomainTypeBrowseLegacy]);
-	AppendDNSNameString            (rec.resrec.name, "local");
-	FoundDefBrowseDomain(m, &LegacyBrowseDomainQ, &rec.resrec, add);
-
 	if (add)
 		{
-		mStatus err;
-
-		// allocate/register a non-legacy _browse PTR record
-		ARListElem *ptr = mallocL("ARListElem", sizeof(*ptr));
-		mDNS_SetupResourceRecord(&ptr->ar, mDNSNULL, mDNSInterface_LocalOnly, kDNSType_PTR, 7200,  kDNSRecordTypeShared, FreeARElemCallback, ptr);
-		MakeDomainNameFromDNSNameString(ptr->ar.resrec.name, mDNS_DomainTypeNames[mDNS_DomainTypeBrowse]);
-		AppendDNSNameString            (ptr->ar.resrec.name, "local");
-		AssignDomainName(&ptr->ar.resrec.rdata->u.name, d);
-		err = mDNS_Register(m, &ptr->ar);
-		if (err)
-			{
-			LogMsg("SetSCPrefsBrowseDomain: mDNS_Register returned error %d", err);
-			freeL("ARListElem", ptr);
-			}
-		else
-			{
-			ptr->next = SCPrefBrowseDomains;
-			SCPrefBrowseDomains = ptr;
-			}
+		RegisterBrowseDomainPTR(m, d, mDNS_DomainTypeBrowse);
+		RegisterBrowseDomainPTR(m, d, mDNS_DomainTypeBrowseLegacy);
 		}
 	else
 		{
-		ARListElem **remove = &SCPrefBrowseDomains;
-		while (*remove && !SameDomainName(&(*remove)->ar.resrec.rdata->u.name, d)) remove = &(*remove)->next;
-		if (!*remove) { LogMsg("SetSCPrefsBrowseDomain (remove) - domain %##s not found!", d->c); return; }
-		mDNS_Deregister(m, &(*remove)->ar);
-		*remove = (*remove)->next;
+		DeregisterBrowseDomainPTR(m, d, mDNS_DomainTypeBrowse);
+		DeregisterBrowseDomainPTR(m, d, mDNS_DomainTypeBrowseLegacy);
 		}
 	}
 
+mDNSlocal void SetSCPrefsBrowseDomains(mDNS *m, DNameListElem * browseDomains, mDNSBool add)
+	{
+	DNameListElem * browseDomain;
+
+	for ( browseDomain = browseDomains; browseDomain; browseDomain = browseDomain->next )
+		{
+			if ( !browseDomain->name.c[0] )
+				{
+				LogMsg("SetSCPrefsBrowseDomains bad DDNS browse domain: %##s", browseDomain->name.c[0] ? (char*) browseDomain->name.c : "(unknown)");
+				}
+			else
+				{
+				SetSCPrefsBrowseDomain(m, &browseDomain->name, add);
+				}
+		}
+	}
 
 mStatus dDNS_Setup( mDNS *const m )
 	{
 	static mDNSBool LegacyNATInitialized = mDNSfalse;
 	mDNSBool dict = mDNStrue;
 	mDNSAddr ip;
-	mDNSAddr	r;
-	// YO CFDictionaryRef dict;
-	// YO CFStringRef     key;
-	domainname BrowseDomain, RegDomain, fqdn;
+	mDNSAddr r;
+	DNameListElem * BrowseDomains;
+	domainname RegDomain, fqdn;
 	
 	// get fqdn, zone from SCPrefs
-	dDNSPlatformGetConfig(&fqdn, &RegDomain, &BrowseDomain);
+	dDNSPlatformGetConfig(&fqdn, &RegDomain, &BrowseDomains);
 	
 	// YO if (!fqdn.c[0] && !RegDomain.c[0]) ReadDDNSSettingsFromConfFile(m, CONFIG_FILE, &fqdn, &RegDomain);
 
@@ -484,12 +518,25 @@ mStatus dDNS_Setup( mDNS *const m )
 		}
 	}
 	
-	if (!SameDomainName(&BrowseDomain, &dDNSBrowseDomain))
-	{
-		if (dDNSBrowseDomain.c[0]) SetSCPrefsBrowseDomain(m, &dDNSBrowseDomain, mDNSfalse);
-		AssignDomainName(&dDNSBrowseDomain, &BrowseDomain);
-		if (dDNSBrowseDomain.c[0]) SetSCPrefsBrowseDomain(m, &dDNSBrowseDomain, mDNStrue);
-	}
+	// Add new browse domains to internal list
+	
+	if ( BrowseDomains )
+		{
+		SetSCPrefsBrowseDomains( m, BrowseDomains, mDNStrue );
+		}
+
+	// Remove old browse domains from internal list
+	
+	if ( dDNSBrowseDomains ) 
+		{
+		SetSCPrefsBrowseDomains( m, dDNSBrowseDomains, mDNSfalse );
+		mDNS_FreeDNameList( dDNSBrowseDomains );
+		}
+
+	// Replace the old browse domains array with the new array
+	
+	dDNSBrowseDomains = BrowseDomains;
+
 	
 	if (!SameDomainName(&fqdn, &dDNSHostname))
 		{
@@ -567,14 +614,28 @@ mStatus dDNS_Setup( mDNS *const m )
 mStatus dDNS_InitDNSConfig(mDNS *const m)
 	{
 	mStatus err;
+	static AuthRecord LocalRegPTR;
 
 	// start query for domains to be used in default (empty string domain) browses
 	err = mDNS_GetDomains(m, &LegacyBrowseDomainQ, mDNS_DomainTypeBrowseLegacy, NULL, mDNSInterface_LocalOnly, FoundDefBrowseDomain, NULL);
 
 	// provide .local automatically
 	SetSCPrefsBrowseDomain(m, &localdomain, mDNStrue);
+
+	// <rdar://problem/4055653> dns-sd -E does not return "local."
+	// register registration domain "local"
+	mDNS_SetupResourceRecord(&LocalRegPTR, mDNSNULL, mDNSInterface_LocalOnly, kDNSType_PTR, 7200, kDNSRecordTypeShared, NULL, NULL);
+	MakeDomainNameFromDNSNameString(LocalRegPTR.resrec.name, mDNS_DomainTypeNames[mDNS_DomainTypeRegistration]);
+	AppendDNSNameString            (LocalRegPTR.resrec.name, "local");
+	AssignDomainName(&LocalRegPTR.resrec.rdata->u.name, &localdomain);
+	err = mDNS_Register(m, &LocalRegPTR);
+	if (err)
+		{
+		LogMsg("ERROR: dDNS_InitDNSConfig - mDNS_Register returned error %d", err);
+		}
+
     return mStatus_NoError;
-}
+	}
 
 void
 dDNS_FreeIPAddrList(IPAddrListElem * list)

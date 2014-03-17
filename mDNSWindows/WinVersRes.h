@@ -23,6 +23,54 @@
     Change History (most recent first):
 
 $Log: WinVersRes.h,v $
+Revision 1.38  2005/04/25 21:59:42  shersche
+Bump to 1.0.0.66
+
+Revision 1.37  2005/04/22 07:39:48  shersche
+Bump to 1.0.0.65
+
+Revision 1.36  2005/04/19 07:25:56  shersche
+Bump version to 1.0.0.64
+
+Revision 1.35  2005/04/13 17:48:58  shersche
+Bump to 1.0.0.63
+
+Revision 1.34  2005/04/06 01:00:55  shersche
+Bump to 1.0.0.62
+
+Revision 1.33  2005/03/30 07:37:41  shersche
+Bump to 1.0.0.61
+
+Revision 1.32  2005/03/23 00:39:46  shersche
+Bump to version 1.0.0.60
+
+Revision 1.31  2005/03/16 03:52:06  shersche
+Bump to 1.0.0.59
+
+Revision 1.30  2005/03/07 19:18:18  shersche
+<rdar://problem/4039831> Update Windows build to 1.0.0.58
+
+Revision 1.29  2005/03/02 20:11:45  shersche
+Update name
+
+Revision 1.28  2005/03/02 03:57:51  shersche
+Bump to 1.0.0.57
+
+Revision 1.27  2005/02/23 03:12:27  shersche
+Bump to 1.0.0.56
+
+Revision 1.26  2005/02/15 23:20:18  shersche
+Bump to 1.0.0.55 and update name
+
+Revision 1.25  2005/02/10 22:35:29  cheshire
+<rdar://problem/3727944> Update name
+
+Revision 1.24  2005/02/08 23:32:24  shersche
+Bump to 1.0.0.54
+
+Revision 1.23  2005/02/02 02:08:28  shersche
+Bump to version 1.0.0.53
+
 Revision 1.22  2005/01/25 17:15:52  shersche
 Bump to 1.0.0.51. Add legal copyright string.
 
@@ -94,13 +142,13 @@ First checked in.
 #ifndef WINRESVERS_H
 #define WINRESVERS_H
 
-#define MASTER_PROD_NAME	"Rendezvous"
+#define MASTER_PROD_NAME	"Bonjour"
 
 // Define the product version for mDNSResponder on Windows
-#define MASTER_PROD_VERS		1,0,0,52
-#define MASTER_PROD_VERS_STR	"1,0,0,52"
-#define MASTER_PROD_VERS_STR2	"1.0.0.52"
-#define MASTER_PROD_VERS_STR3 "Explorer Plugin 1.0.0.52"
+#define MASTER_PROD_VERS		1,0,0,66
+#define MASTER_PROD_VERS_STR	"1,0,0,66"
+#define MASTER_PROD_VERS_STR2	"1.0.0.66"
+#define MASTER_PROD_VERS_STR3 "Explorer Plugin 1.0.0.66"
 
 // Define the legal copyright
 #define MASTER_LEGAL_COPYRIGHT "Copyright (C) 2003-2005 Apple Computer, Inc."

@@ -28,6 +28,16 @@
     Change History (most recent first):
 
 $Log: dnssd_clientstub.c,v $
+Revision 1.47  2005/03/31 02:19:56  cheshire
+<rdar://problem/4021486> Fix build warnings
+Reviewed by: Scott Herscher
+
+Revision 1.46  2005/03/21 00:39:31  shersche
+<rdar://problem/4021486> Fix build warnings on Win32 platform
+
+Revision 1.45  2005/02/01 01:25:06  shersche
+Define sleep() to be Sleep() for Windows compatibility
+
 Revision 1.44  2005/01/27 22:57:56  cheshire
 Fix compile errors on gcc4
 
@@ -38,7 +48,7 @@ Revision 1.42  2005/01/11 02:01:02  shersche
 Use dnssd_close() rather than close() for Windows compatibility
 
 Revision 1.41  2004/12/23 17:34:26  ksekar
-<rdar://problem/3931319> Rendevzous calls leak sockets if mDNSResponder is not running
+<rdar://problem/3931319> Calls leak sockets if mDNSResponder is not running
 
 Revision 1.40  2004/11/23 03:39:47  cheshire
 Let interface name/index mapping capability live directly in JNISupport.c,
@@ -78,7 +88,7 @@ Revision 1.30  2004/09/16 23:14:24  cheshire
 Changes for Windows compatibility
 
 Revision 1.29  2004/09/16 21:46:38  ksekar
-<rdar://problem/3665304> Need SPI for LoginWindow to associate a UID with a Wide Area Rendezvous domain
+<rdar://problem/3665304> Need SPI for LoginWindow to associate a UID with a Wide Area domain
 
 Revision 1.28  2004/08/11 17:10:04  cheshire
 Fix signed/unsigned warnings
@@ -186,6 +196,8 @@ Update to APSL 2.0
 // conversion in expression"
 #pragma warning(disable:4152)
 
+#define sleep(X) Sleep((X) * 1000)
+
 static int g_initWinsock = 0;
 #endif
 
@@ -261,7 +273,9 @@ static ipc_msg_hdr *create_hdr(uint32_t op, size_t *len, char **data_start, int 
     char *msg = NULL;
     ipc_msg_hdr *hdr;
     int datalen;
+#if !defined(USE_TCP_LOOPBACK)
     char ctrl_path[256];
+#endif
 
     if (!reuse_socket)
         {
@@ -364,7 +378,7 @@ static DNSServiceErrorType deliver_request(void *msg, DNSServiceRef sdr, int reu
     char *data = (char *)msg + sizeof(ipc_msg_hdr);
     dnssd_sock_t listenfd = dnssd_InvalidSocket, errsd = dnssd_InvalidSocket;
 	int ret;
-	unsigned int len = sizeof(caddr);
+	dnssd_socklen_t len = (dnssd_socklen_t) sizeof(caddr);
     DNSServiceErrorType err = kDNSServiceErr_Unknown;
 
     if (!hdr || sdr->sockfd < 0) return kDNSServiceErr_Unknown;

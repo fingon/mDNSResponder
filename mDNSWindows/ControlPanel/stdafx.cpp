@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -21,27 +21,14 @@
  * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
+    
+$Log: stdafx.cpp,v $
+Revision 1.2  2005/03/03 19:55:22  shersche
+<rdar://problem/4034481> ControlPanel source code isn't saving CVS log info
 
-$Log: Prefix.h,v $
-Revision 1.1  2004/06/18 04:17:43  rpantos
-Move up one level.
 
-Revision 1.1  2004/01/30 02:58:57  bradley
-Test tool for the mDNSResponder Windows service.
-					
 */
 
-#ifndef __PREFIX__
-#define __PREFIX__
+#include "stdafx.h"
 
-#if( defined( _DEBUG ) )
-	#define	DEBUG					1
-	#define	MDNS_DEBUGMSGS			1
-#else
-	#define	DEBUG					0
-#endif
 
-#define	DNS_SD_DIRECT_ENABLED		0
-#define	DNS_SD_CLIENT_ENABLED		1
-
-#endif	// __PREFIX__

@@ -27,6 +27,12 @@
     Change History (most recent first):
 
 $Log: dnssd_ipc.h,v $
+Revision 1.20  2005/03/21 00:39:31  shersche
+<rdar://problem/4021486> Fix build warnings on Win32 platform
+
+Revision 1.19  2005/02/02 02:25:22  cheshire
+<rdar://problem/3980388> /var/run/mDNSResponder should be /var/run/mdnsd on Linux
+
 Revision 1.18  2005/01/27 22:57:56  cheshire
 Fix compile errors on gcc4
 
@@ -47,7 +53,7 @@ Revision 1.13  2004/09/16 23:14:25  cheshire
 Changes for Windows compatibility
 
 Revision 1.12  2004/09/16 21:46:38  ksekar
-<rdar://problem/3665304> Need SPI for LoginWindow to associate a UID with a Wide Area Rendezvous domain
+<rdar://problem/3665304> Need SPI for LoginWindow to associate a UID with a Wide Area domain
 
 Revision 1.11  2004/08/10 06:24:56  cheshire
 Use types with precisely defined sizes for 'op' and 'reg_index', for better
@@ -86,7 +92,8 @@ Update to APSL 2.0
 #	define dnssd_EINTR			WSAEINTR
 #	define MSG_WAITALL 			0
 #	define dnssd_sock_t			SOCKET
-#	define dnssd_sockbuf_t		
+#	define dnssd_socklen_t		int
+#	define dnssd_sockbuf_t		const char*
 #	define dnssd_close(sock)	closesocket(sock)
 #	define dnssd_errno()		WSAGetLastError()
 #	define ssize_t				int
@@ -106,6 +113,8 @@ Update to APSL 2.0
 #	define dnssd_EINTR			EINTR
 #	define dnssd_EPIPE			EPIPE
 #	define dnssd_sock_t			int
+#	define dnssd_socklen_t		unsigned int
+#	define dnssd_sockbuf_t		const char*
 #	define dnssd_close(sock)	close(sock)
 #	define dnssd_errno()		errno
 #endif
@@ -118,7 +127,9 @@ Update to APSL 2.0
 #	define dnssd_sockaddr_t		struct sockaddr_in
 #else
 #	define AF_DNSSD				AF_LOCAL
-#	define MDNS_UDS_SERVERPATH	"/var/run/mDNSResponder"
+#	ifndef MDNS_UDS_SERVERPATH
+#		define MDNS_UDS_SERVERPATH	"/var/run/mDNSResponder"
+#	endif
 #	define LISTENQ				100
     // longest legal control path length
 #	define MAX_CTLPATH			256	

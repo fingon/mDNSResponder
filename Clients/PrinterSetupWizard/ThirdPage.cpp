@@ -23,6 +23,33 @@
     Change History (most recent first):
     
 $Log: ThirdPage.cpp,v $
+Revision 1.23  2005/04/18 02:33:47  shersche
+<rdar://problem/4091216> Default printer option cannot be deselected
+
+Revision 1.22  2005/04/13 17:46:22  shersche
+<rdar://problem/4082122> Generic PCL not selected when printers advertise multiple text records
+
+Revision 1.21  2005/03/30 02:09:55  shersche
+Auto-resize the column width to account for differing fonts and font sizes
+
+Revision 1.20  2005/03/05 02:27:45  shersche
+<rdar://problem/4030388> Generic drivers don't do color
+
+Revision 1.19  2005/02/23 02:08:51  shersche
+<rdar://problem/4012275> If we can't match the manufacturer, and select a generic printer, then show all the manufacturers in the manufacturer pane, not just "Generic".
+
+Revision 1.18  2005/02/15 07:02:51  shersche
+<rdar://problem/4003724> Display different UI text when generic printer drivers are selected
+
+Revision 1.17  2005/02/08 21:45:06  shersche
+<rdar://problem/3947490> Default to Generic PostScript or PCL if unable to match driver
+
+Revision 1.16  2005/02/08 18:56:03  shersche
+Fix generated IPP url so that it doesn't add "/printers" string
+
+Revision 1.15  2005/02/01 01:44:07  shersche
+Load ntprint.inf at startup.  This will cause the wizard to take a second or two longer to come up, but will eliminate the pause when auto-selecting the print drivers.
+
 Revision 1.14  2005/01/25 08:55:54  shersche
 <rdar://problem/3911084> Load icons at run-time from resource DLL
 Bug #: 3911084
@@ -102,8 +129,17 @@ First checked in
 //
 // These are pre-defined names for Generic manufacturer and model
 //
-#define kGenericManufacturer	L"Generic"
-#define kGenericModel			L"Generic / Text Only"
+#define kGenericManufacturer		L"Generic"
+#define kGenericText				L"Generic / Text Only"
+#define kGenericPostscript			L"Generic / Postscript"
+#define kGenericPCL					L"Generic / PCL"
+#define kPDLPostscriptKey			L"application/postscript"
+#define kPDLPCLKey					L"application/vnd.hp-pcl"
+#define kGenericPSColorDriver		L"HP Color LaserJet 4550 PS"
+#define kGenericPSDriver			L"HP LaserJet 4050 Series PS"
+#define kGenericPCLColorDriver		L"HP Color LaserJet 4550 PCL"
+#define kGenericPCLDriver			L"HP LaserJet 4050 Series PCL"
+
 
 //
 // states for parsing ntprint.inf
@@ -125,11 +161,45 @@ CThirdPage::CThirdPage()
 		m_initialized(false),
 		m_printerImage( NULL )
 {
+	static const int	bufferSize	= 32768;
+	TCHAR				windowsDirectory[bufferSize];
+	CString				header;
+	CString				ntPrint;
+	OSStatus			err;
+	BOOL				ok;
+
 	m_psp.dwFlags &= ~(PSP_HASHELP);
 	m_psp.dwFlags |= PSP_DEFAULT|PSP_USEHEADERTITLE|PSP_USEHEADERSUBTITLE;
 	
 	m_psp.pszHeaderTitle = MAKEINTRESOURCE(IDS_INSTALL_TITLE);
 	m_psp.pszHeaderSubTitle = MAKEINTRESOURCE(IDS_INSTALL_SUBTITLE);
+
+	//
+	// load printers from ntprint.inf
+	//
+	ok = GetWindowsDirectory( windowsDirectory, bufferSize );
+	err = translate_errno( ok, errno_compat(), kUnknownErr );
+	require_noerr( err, exit );
+ 
+	ntPrint.Format(L"%s\\%s", windowsDirectory, kNTPrintFile);
+	err = LoadPrintDriverDefsFromFile( m_manufacturers, ntPrint, false );
+	require_noerr(err, exit);
+
+	//
+	// load printer drivers that have been installed on this machine
+	//
+	err = LoadPrintDriverDefs( m_manufacturers );
+	require_noerr(err, exit);
+
+	//
+	// and lastly load our own special generic printer defs
+	//
+	err = LoadGenericPrintDriverDefs( m_manufacturers );
+	require_noerr( err, exit );
+
+exit:
+
+	return;
 }
 
 
@@ -170,7 +240,7 @@ CThirdPage::~CThirdPage()
 //
 // ----------------------------------------------------
 void
-CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model)
+CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturers & manufacturers, Manufacturer * manufacturer, Model * model)
 {
 	LVFINDINFO	info;
 	int			nIndex;
@@ -178,9 +248,6 @@ CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * man
 	check( printer != NULL );
 	check( manufacturer != NULL );
 	check( model != NULL );
-
-	Manufacturers manufacturers;
-	manufacturers[manufacturer->name] = manufacturer;
 
 	PopulateUI( manufacturers );
 
@@ -202,7 +269,7 @@ CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * man
 	// select the model
 	//
 	info.flags	= LVFI_STRING;
-	info.psz	= model->name;
+	info.psz	= model->displayName;
 
 	nIndex = m_modelListCtrl.FindItem(&info);
 
@@ -229,7 +296,8 @@ void
 CThirdPage::CopyPrinterSettings( Printer * printer, Service * service, Manufacturer * manufacturer, Model * model )
 {
 	printer->manufacturer		=	manufacturer->name;
-	printer->model				=	model->name;
+	printer->displayModelName	=	model->displayName;
+	printer->modelName			=	model->name;
 	printer->driverInstalled	=	model->driverInstalled;
 	printer->infFileName		=	model->infFileName;
 
@@ -261,7 +329,7 @@ CThirdPage::CopyPrinterSettings( Printer * printer, Service * service, Manufactu
 
 		if ( q->name.GetLength() > 0 )
 		{
-			printer->portName.Format(L"http://%s:%d/printers/%s", static_cast<LPCTSTR>(service->hostname), service->portNumber, static_cast<LPCTSTR>(q->name) );
+			printer->portName.Format(L"http://%s:%d/%s", static_cast<LPCTSTR>(service->hostname), service->portNumber, static_cast<LPCTSTR>(q->name) );
 		}
 		else
 		{
@@ -583,6 +651,7 @@ CThirdPage::LoadPrintDriverDefsFromFile(Manufacturers & manufacturers, const CSt
 					require_action( model, exit, err = kNoMemoryErr );
 
 					model->infFileName		=	filename;
+					model->displayName		=	name;
 					model->name				=	name;
 					model->driverInstalled	=	false;
 
@@ -722,6 +791,7 @@ CThirdPage::LoadPrintDriverDefs( Manufacturers & manufacturers )
 	
 				require_action( model, exit, err = kNoMemoryErr );
 	
+				model->displayName		=	info[i].pName;
 				model->name				=	info[i].pName;
 				model->driverInstalled	=	true;
 	
@@ -740,6 +810,137 @@ exit:
 	return err;
 }
 
+
+// -------------------------------------------------------
+// LoadGenericPrintDriverDefs
+//
+// This function is responsible for loading polymorphic
+// generic print drivers defs.  The UI will read
+// something like "Generic / Postscript" and we can map
+// that to any print driver we want.
+// -------------------------------------------------------
+OSStatus
+CThirdPage::LoadGenericPrintDriverDefs( Manufacturers & manufacturers )
+{
+	Manufacturer		*	manufacturer;
+	Model				*	model;
+	Manufacturers::iterator	iter;
+	CString					psDriverName;
+	CString					pclDriverName;
+	OSStatus				err	= 0;
+
+	// <rdar://problem/4030388> Generic drivers don't do color
+
+	// First try and find our generic driver names
+
+	iter = manufacturers.find(L"HP");
+	require_action( iter != manufacturers.end(), exit, err = kUnknownErr );
+	manufacturer = iter->second;
+
+	// Look for Postscript 
+
+	model = manufacturer->find( kGenericPSColorDriver );
+
+	if ( !model )
+	{
+		model = manufacturer->find( kGenericPSDriver );
+	}
+
+	if ( model )
+	{
+		psDriverName = model->name;
+	
+	}
+
+	// Look for PCL
+	
+	model = manufacturer->find( kGenericPCLColorDriver );
+
+	if ( !model )
+	{
+		model = manufacturer->find( kGenericPCLDriver );
+	}
+
+	if ( model )
+	{
+		pclDriverName = model->name;	
+	}
+
+	// If we found either a generic PS driver, or a generic PCL driver,
+	// then add them to the list
+
+	if ( psDriverName.GetLength() || pclDriverName.GetLength() )
+	{
+		// Try and find generic manufacturer if there is one
+
+		iter = manufacturers.find(L"Generic");
+		
+		if (iter != manufacturers.end())
+		{
+			manufacturer = iter->second;
+		}
+		else
+		{
+			try
+			{
+				manufacturer = new Manufacturer;
+			}
+			catch (...)
+			{
+				manufacturer = NULL;
+			}
+		
+			require_action( manufacturer, exit, err = kNoMemoryErr );
+		
+			manufacturer->name					=	"Generic";
+			manufacturers[manufacturer->name]	=	manufacturer;
+		}
+
+		if ( psDriverName.GetLength() > 0 )
+		{
+			try
+			{
+				m_genericPostscript = new Model;
+			}
+			catch (...)
+			{
+				m_genericPostscript = NULL;
+			}
+			
+			require_action( m_genericPostscript, exit, err = kNoMemoryErr );
+
+			m_genericPostscript->displayName		=	kGenericPostscript;
+			m_genericPostscript->name				=	psDriverName;
+			m_genericPostscript->driverInstalled	=	false;
+
+			manufacturer->models.push_back( m_genericPostscript );
+		}
+
+		if ( pclDriverName.GetLength() > 0 )
+		{
+			try
+			{
+				m_genericPCL = new Model;
+			}
+			catch (...)
+			{
+				m_genericPCL = NULL;
+			}
+			
+			require_action( m_genericPCL, exit, err = kNoMemoryErr );
+
+			m_genericPCL->displayName		=	kGenericPCL;
+			m_genericPCL->name				=	pclDriverName;
+			m_genericPCL->driverInstalled	=	false;
+
+			manufacturer->models.push_back( m_genericPCL );
+		}
+	}
+
+exit:
+
+	return err;
+}
 
 // ------------------------------------------------------
 // ConvertToManufacturerName
@@ -839,26 +1040,35 @@ CThirdPage::NormalizeManufacturerName( const CString & name )
 OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * printer, Service * service)
 {
 	CString					normalizedProductName;
-	Manufacturer		*	manufacturer	=	NULL;
-	Model				*	model			=	NULL;
-	bool					found			=	false;
+	Manufacturer		*	manufacturer		=	NULL;
+	Manufacturer		*	genericManufacturer	=	NULL;
+	Model				*	model				=	NULL;
+	Model				*	genericModel		=	NULL;
+	bool					found				=	false;
 	CString					text;
-	OSStatus				err				=	kNoErr;
+	OSStatus				err					=	kNoErr;
+
+	check( printer );
+	check( service );
+
+	Queue * q = service->SelectedQueue();
+
+	check( q );
 
 	//
 	// first look to see if we have a usb_MFG descriptor
 	//
-	if (service->usb_MFG.GetLength() > 0)
+	if ( q->usb_MFG.GetLength() > 0)
 	{
-		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( service->usb_MFG ) );
+		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( q->usb_MFG ) );
 	}
 
 	if ( manufacturer == NULL )
 	{
-		service->product.Remove('(');
-		service->product.Remove(')');
+		q->product.Remove('(');
+		q->product.Remove(')');
 
-		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( service->product ) );
+		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( q->product ) );
 	}
 	
 	//
@@ -866,22 +1076,25 @@ OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * print
 	//
 	if ( manufacturer != NULL )
 	{
-		if (service->usb_MDL.GetLength() > 0)
+		if ( q->usb_MDL.GetLength() > 0 )
 		{
-			model = MatchModel ( manufacturer, ConvertToModelName ( service->usb_MDL ) );
+			model = MatchModel ( manufacturer, ConvertToModelName ( q->usb_MDL ) );
 		}
 
-		if ( model == NULL )
+		if ( ( model == NULL ) && ( q->product.GetLength() > 0 ) )
 		{
-			service->product.Remove('(');
-			service->product.Remove(')');
+			q->product.Remove('(');
+			q->product.Remove(')');
 
-			model = MatchModel ( manufacturer, ConvertToModelName ( service->product ) );
+			model = MatchModel ( manufacturer, ConvertToModelName ( q->product ) );
 		}
 
 		if ( model != NULL )
 		{
-			SelectMatch(printer, service, manufacturer, model);
+			Manufacturers manufacturers;
+			
+			manufacturers[manufacturer->name] = manufacturer;
+			SelectMatch(printer, service, manufacturers, manufacturer, model);
 			found = true;
 		}
 	}
@@ -893,6 +1106,27 @@ OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * print
 	if (found)
 	{
 		text.LoadString(IDS_PRINTER_MATCH_GOOD);
+	}
+	else if ( MatchGeneric( printer, service, &genericManufacturer, &genericModel ) )
+	{
+		Manufacturers *	pManufacturers;
+		Manufacturers	manufacturers;
+		
+		text.LoadString(IDS_PRINTER_MATCH_MAYBE);
+		
+		if ( manufacturer )
+		{
+			manufacturers[genericManufacturer->name]	= genericManufacturer;
+			manufacturers[manufacturer->name]			= manufacturer;
+
+			pManufacturers = &manufacturers;
+		}
+		else
+		{
+			pManufacturers = &m_manufacturers;
+		}
+
+		SelectMatch( printer, service, *pManufacturers, genericManufacturer, genericModel );
 	}
 	else
 	{
@@ -1021,6 +1255,51 @@ CThirdPage::MatchModel(Manufacturer * manufacturer, const CString & name)
 }
 
 
+// -------------------------------------------------------
+// MatchGeneric
+//
+// This function will attempt to find a generic printer
+// driver for a printer that we weren't able to match
+// specifically
+//
+BOOL
+CThirdPage::MatchGeneric( Printer * printer, Service * service, Manufacturer ** manufacturer, Model ** model )
+{
+	CString	pdl;
+	BOOL	ok = FALSE;
+
+	DEBUG_UNUSED( printer );
+
+	check( service );
+
+	Queue * q = service->SelectedQueue();
+
+	check( q );
+
+	Manufacturers::iterator iter = m_manufacturers.find( kGenericManufacturer );
+	require_action_quiet( iter != m_manufacturers.end(), exit, ok = FALSE );
+
+	*manufacturer = iter->second;
+
+	pdl = q->pdl;
+	pdl.MakeLower();
+
+	if ( pdl.Find( kPDLPCLKey ) != -1 )
+	{
+		*model	= m_genericPCL;
+		ok		= TRUE;
+	}
+	else if ( pdl.Find( kPDLPostscriptKey ) != -1 )
+	{
+		*model	= m_genericPostscript;
+		ok		= TRUE;
+	}
+
+exit:
+
+	return ok;
+}
+
 
 // -----------------------------------------------------------
 // OnInitPage
@@ -1031,14 +1310,13 @@ CThirdPage::MatchModel(Manufacturer * manufacturer, const CString & name)
 
 OSStatus CThirdPage::OnInitPage()
 {
-	static const int		bufferSize	= 32768;
-	TCHAR					windowsDirectory[bufferSize];
-	CString					header;
-	CString					ntPrint;
-	OSStatus				err;
-	BOOL					ok;
+	CString		header;
+	CString		ntPrint;
+	OSStatus	err = kNoErr;
 
 	// Load printer icon
+
+
 
 	check( m_printerImage == NULL );
 	
@@ -1067,31 +1345,12 @@ OSStatus CThirdPage::OnInitPage()
 	// selection notice
 	//
 	header.LoadString(IDS_MANUFACTURER_HEADING);
-	m_manufacturerListCtrl.InsertColumn(0, header, LVCFMT_LEFT, 138);
+	m_manufacturerListCtrl.InsertColumn(0, header, LVCFMT_LEFT, -1 );
 	m_manufacturerSelected = NULL;
 
 	header.LoadString(IDS_MODEL_HEADING);
-	m_modelListCtrl.InsertColumn(0, header, LVCFMT_LEFT, 247);
+	m_modelListCtrl.InsertColumn(0, header, LVCFMT_LEFT, -1 );
 	m_modelSelected = NULL;
-
-	//
-	// load printers from ntprint.inf
-	//
-	ok = GetWindowsDirectory( windowsDirectory, bufferSize );
-	err = translate_errno( ok, errno_compat(), kUnknownErr );
-	require_noerr( err, exit );
- 
-	ntPrint.Format(L"%s\\%s", windowsDirectory, kNTPrintFile);
-	err = LoadPrintDriverDefsFromFile( m_manufacturers, ntPrint, false );
-	require_noerr(err, exit);
-
-	//
-	// load printer drivers that have been installed on this machine
-	//
-	err = LoadPrintDriverDefs( m_manufacturers );
-	require_noerr(err, exit);
-
-exit:
 
 	return (err);
 }
@@ -1105,6 +1364,7 @@ void CThirdPage::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_PRINTER_NAME, m_printerName);
 	DDX_Control(pDX, IDC_DEFAULT_PRINTER, m_defaultPrinterCtrl);
 	DDX_Control(pDX, IDC_PRINTER_SELECTION_TEXT, m_printerSelectionText);
+
 }
 
 
@@ -1193,6 +1453,8 @@ CThirdPage::PopulateUI(Manufacturers & manufacturers)
 		nIndex = m_manufacturerListCtrl.InsertItem(0, manufacturer->name);
 
 		m_manufacturerListCtrl.SetItemData(nIndex, (DWORD_PTR) manufacturer);
+
+		m_manufacturerListCtrl.SetColumnWidth( 0, LVSCW_AUTOSIZE_USEHEADER );
 	}
 
 	return 0;
@@ -1230,9 +1492,11 @@ void CThirdPage::OnLvnItemchangedManufacturer(NMHDR *pNMHDR, LRESULT *pResult)
 		{
 			Model * model = *iter;
 
-			int nItem = m_modelListCtrl.InsertItem(0, model->name);
+			int nItem = m_modelListCtrl.InsertItem( 0, model->displayName );
 
 			m_modelListCtrl.SetItemData(nItem, (DWORD_PTR) model);
+
+			m_modelListCtrl.SetColumnWidth( 0, LVSCW_AUTOSIZE_USEHEADER );
 		}
 
 		m_modelListCtrl.SetRedraw(TRUE);
@@ -1293,7 +1557,7 @@ void CThirdPage::OnBnClickedDefaultPrinter()
 	printer = psheet->GetSelectedPrinter();
 	require_quiet( printer, exit );
 
-	printer->deflt = m_defaultPrinterCtrl.GetState() ? true : false;
+	printer->deflt = ( m_defaultPrinterCtrl.GetCheck() == BST_CHECKED ) ? true : false;
 
 exit:
 

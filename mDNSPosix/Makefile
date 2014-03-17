@@ -24,6 +24,21 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # $Log: Makefile,v $
+# Revision 1.59  2005/04/14 21:07:10  rpantos
+# Bug #: 4089257, Clean build broken for Java support on POSIX
+# Submitted by: Roger Pantos
+# Reviewed by: Kiren Sekar
+#
+# Revision 1.58  2005/04/08 21:37:57  ksekar
+# <rdar://problem/3792767> get_ifi_info doesn't return IPv6 interfaces on Linux
+#
+# Revision 1.57  2005/03/17 04:02:28  cheshire
+# <rdar://problem/3986419> mDNSResponder won't compile with gcc4 on Tiger
+# Changed Makefile to link using gcc instead of libtool
+#
+# Revision 1.56  2005/02/02 02:25:21  cheshire
+# <rdar://problem/3980388> /var/run/mDNSResponder should be /var/run/mdnsd on Linux
+#
 # Revision 1.55  2005/01/27 22:55:00  cheshire
 # Add "make os=tiger" target which uses gcc4 and "-Wdeclaration-after-statement"
 #
@@ -216,7 +231,7 @@ LD = ld -shared
 CP = cp
 RM = rm
 LN = ln -s -f
-CFLAGS_COMMON = -I. -I$(COREDIR) -I$(SHAREDDIR) -W -Wall -DPID_FILE=\"/var/run/mdnsd.pid\"
+CFLAGS_COMMON = -I. -I$(COREDIR) -I$(SHAREDDIR) -W -Wall -DPID_FILE=\"/var/run/mdnsd.pid\" -DMDNS_UDS_SERVERPATH=\"/var/run/mdnsd\"
 LIBFLAGS =
 DNSEXT_FLAGS = -D_REENTRANT -g -Wall -lpthread
 LDSUFFIX = so
@@ -250,7 +265,7 @@ endif
 else
 
 ifeq ($(os),linux)
-CFLAGS_OS = -DNOT_HAVE_SA_LEN -DUSES_NETLINK
+CFLAGS_OS = -DNOT_HAVE_SA_LEN -DUSES_NETLINK -DHAVE_LINUX
 JAVACFLAGS_OS += -I$(JDK)/include/linux
 OPTIONALTARG = nss_mdns
 OPTINSTALL   = InstalledNSS
@@ -298,7 +313,7 @@ else
 ifeq ($(os),tiger)
 CFLAGS_OS = -DHAVE_IPV6 -no-cpp-precomp -Wdeclaration-after-statement
 CC = @gcc-4.0
-LD = libtool -dynamic
+LD = $(CC) -dynamiclib
 LIBFLAGS = -lSystem
 LDSUFFIX = dylib
 JDK = /System/Library/Frameworks/JavaVM.framework/Home
@@ -506,8 +521,8 @@ Java: setup $(BUILDDIR)/dns_sd.jar $(BUILDDIR)/libjdns_sd.$(LDSUFFIX)
 
 JAVASRC	= $(SHAREDDIR)/Java
 JARCONTENTS =	$(OBJDIR)/com/apple/dnssd/DNSSDService.class \
-				$(OBJDIR)/com/apple/dnssd/DNSRecord.class \
 				$(OBJDIR)/com/apple/dnssd/DNSSDException.class \
+				$(OBJDIR)/com/apple/dnssd/DNSRecord.class \
 				$(OBJDIR)/com/apple/dnssd/TXTRecord.class \
 				$(OBJDIR)/com/apple/dnssd/DNSSDRegistration.class \
 				$(OBJDIR)/com/apple/dnssd/BaseListener.class \
