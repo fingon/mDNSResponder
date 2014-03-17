@@ -221,7 +221,12 @@ mDNSlocal mStatus StartQuery(DNSQuestion *q, char *qname, mDNSu16 qtype, const m
 	q->ForceMCast       = mDNStrue;		// Query via multicast, even for apparently uDNS names like 1.1.1.17.in-addr.arpa.
 	q->ReturnIntermed   = mDNStrue;
 	q->SuppressUnusable = mDNSfalse;
-	q->WakeOnResolve    = mDNSfalse;
+	q->SearchListIndex  = 0;
+	q->AppendSearchDomains = 0;
+	q->RetryWithSearchDomains = mDNSfalse;
+	q->TimeoutQuestion  = 0;
+	q->WakeOnResolve    = 0;
+	q->qnameOrig        = mDNSNULL;
 	q->QuestionCallback = callback;
 	q->QuestionContext  = NULL;
 
@@ -330,8 +335,13 @@ mDNSexport int main(int argc, char **argv)
 			if (StopNow == 2) break;
 			}
 #endif
-		else
+		else {
+			if (strlen(arg) >= sizeof(hostname)) {
+				fprintf(stderr, "hostname must be < %d characters\n", (int)sizeof(hostname));
+				goto usage;
+			}
 			strcpy(hostname, arg);
+		}
 	
 		// Now we have the host name; get its A, AAAA, and HINFO
 		if (hostname[0]) DoQuery(&q, hostname, kDNSQType_ANY, &target, InfoCallback);
@@ -363,6 +373,6 @@ mDNSexport int main(int argc, char **argv)
 	return(0);
 
 usage:
-	fprintf(stderr, "%s <dot-local hostname> or <IPv4 address> or <IPv6 address> ...\n", progname);
+	fprintf(stderr, "Usage: %s <dot-local hostname> or <IPv4 address> or <IPv6 address> ...\n", progname);
 	return(-1);
 	}
