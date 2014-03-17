@@ -36,12 +36,6 @@
 	Change History (most recent first):
 
 $Log: mDNSPosix.c,v $
-Revision 1.25.2.1  2004/04/09 17:57:31  cheshire
-Make sure to set the TxAndRx field so that duplicate suppression works correctly
-
-Revision 1.25  2003/10/30 19:25:49  cheshire
-Fix signed/unsigned warning on certain compilers
-
 Revision 1.24  2003/08/18 23:12:23  cheshire
 <rdar://problem/3382647> mDNSResponder divide by zero in mDNSPlatformTimeNow()
 
@@ -418,7 +412,7 @@ mDNSlocal void GetUserSpecifiedFriendlyComputerName(domainlabel *const namelabel
 mDNSlocal void GetUserSpecifiedRFC1034ComputerName(domainlabel *const namelabel)
 	{
 	int len = 0;
-	gethostname((char *)(&namelabel->c[1]), MAX_DOMAIN_LABEL);
+	gethostname(&namelabel->c[1], MAX_DOMAIN_LABEL);
 	while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') len++;
 	namelabel->c[0] = len;
 	}
@@ -698,7 +692,6 @@ static int SetupOneInterface(mDNS *const m, struct sockaddr *intfAddr, const cha
 		// Set up the fields required by the mDNS core.
 		SockAddrTomDNSAddr(intfAddr, &intf->coreIntf.ip, NULL);
 		intf->coreIntf.Advertise = m->AdvertiseLocalAddresses;
-		intf->coreIntf.TxAndRx   = mDNStrue;
 
 		// Set up the extra fields in PosixNetworkInterface.
 		assert(intf->intfName != NULL);         // intf->intfName already set up above

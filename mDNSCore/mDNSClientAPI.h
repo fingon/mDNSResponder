@@ -23,35 +23,6 @@
     Change History (most recent first):
 
 $Log: mDNSClientAPI.h,v $
-Revision 1.114.2.9  2004/04/22 03:17:35  cheshire
-Fix use of "struct __attribute__((__packed__))" so it only applies on GCC >= 2.9
-
-Revision 1.114.2.8  2004/03/30 06:55:37  cheshire
-Gave name to anonymous struct, to avoid errors on certain compilers.
-(Thanks to ramaprasad.kr@hp.com for reporting this.)
-
-Revision 1.114.2.7  2004/03/09 02:31:27  cheshire
-Remove erroneous underscore in 'packed_struct' (makes no difference now, but might in future)
-
-Revision 1.114.2.6  2004/03/02 02:55:25  cheshire
-<rdar://problem/3549576> Properly support "_services._dns-sd._udp" meta-queries
-
-Revision 1.114.2.5  2004/02/18 23:35:17  cheshire
-<rdar://problem/3488559>: Hard code domain enumeration functions to return ".local" only
-Also make mDNS_StopGetDomains() a no-op too, so that we don't get warning messages in syslog
-
-Revision 1.114.2.4  2004/01/28 23:29:20  cheshire
-Fix structure packing (only affects third-party Darwin developers)
-
-Revision 1.114.2.3  2003/12/05 00:03:34  cheshire
-<rdar://problem/3487869> Use buffer size MAX_ESCAPED_DOMAIN_NAME instead of 256
-
-Revision 1.114.2.2  2003/12/04 23:30:00  cheshire
-Add "#define MAX_ESCAPED_DOMAIN_NAME 1005", needed for Posix folder to build
-
-Revision 1.114.2.1  2003/12/03 11:07:58  cheshire
-<rdar://problem/3457718>: Stop and start of a service uses old ip address (with old port number)
-
 Revision 1.114  2003/08/29 19:44:15  cheshire
 <rdar://problem/3400967> Traffic reduction: Eliminate synchronized QUs when a new service appears
 1. Use m->RandomQueryDelay to impose a random delay in the range 0-500ms on queries
@@ -434,33 +405,13 @@ Merge in license terms from Quinn's copy, in preparation for Darwin release
 // ***************************************************************************
 // Function scope indicators
 
-// If you see "mDNSlocal" before a function name in a C file, it means the function is not callable outside this file
+// If you see "mDNSlocal" before a function name, it means the function is not callable outside this file
 #ifndef mDNSlocal
 #define mDNSlocal static
 #endif
-// If you see "mDNSexport" before a symbol in a C file, it means the symbol is exported for use by clients
-// For every "mDNSexport" in a C file, there needs to be a corresponding "extern" declaration in some header file
-// (When a C file #includes a header file, the "extern" declarations tell the compiler:
-// "This symbol exists -- but not necessarily in this C file.")
+// If you see "mDNSexport" before a symbol, it means the symbol is exported for use by clients
 #ifndef mDNSexport
 #define mDNSexport
-#endif
-
-// ***************************************************************************
-// Structure packing macro
-
-// If we're not using GNUC, it's not fatal.
-// Most compilers naturally pack the on-the-wire structures correctly anyway, so a plain "struct" is usually fine.
-// In the event that structures are not packed correctly, mDNS_Init() will detect this and report an error, so the
-// developer will know what's wrong, and can investigate what needs to be done on that compiler to provide proper packing.
-#ifndef packedstruct
- #if ((__GNUC__ > 2) || ((__GNUC__ == 2) && (__GNUC_MINOR__ >= 9)))
-  #define packedstruct struct __attribute__((__packed__))
-  #define packedunion  union  __attribute__((__packed__))
- #else
-  #define packedstruct struct
-  #define packedunion  union
- #endif
 #endif
 
 // ***************************************************************************
@@ -520,18 +471,13 @@ typedef   signed char  mDNSs8;
 typedef unsigned char  mDNSu8;
 typedef   signed short mDNSs16;
 typedef unsigned short mDNSu16;
-#if _LP64
-typedef   signed int   mDNSs32;
-typedef unsigned int   mDNSu32;
-#else
 typedef   signed long  mDNSs32;
 typedef unsigned long  mDNSu32;
-#endif
 
 // To enforce useful type checking, we make mDNSInterfaceID be a pointer to a dummy struct
 // This way, mDNSInterfaceIDs can be assigned, and compared with each other, but not with other types
 // Declaring the type to be the typical generic "void *" would lack this type checking
-typedef struct mDNSInterfaceID_dummystruct { void *dummy; } *mDNSInterfaceID;
+typedef struct { void *dummy; } *mDNSInterfaceID;
 
 // These types are for opaque two- and four-byte identifiers.
 // The "NotAnInteger" fields of the unions allow the value to be conveniently passed around in a
@@ -540,9 +486,9 @@ typedef struct mDNSInterfaceID_dummystruct { void *dummy; } *mDNSInterfaceID;
 // less than, add, multiply, increment, decrement, etc., are undefined for opaque identifiers,
 // and if you make the mistake of trying to do those using the NotAnInteger field, then you'll
 // find you get code that doesn't work consistently on big-endian and little-endian machines.
-typedef packedunion { mDNSu8 b[2]; mDNSu16 NotAnInteger; } mDNSOpaque16;
-typedef packedunion { mDNSu8 b[4]; mDNSu32 NotAnInteger; } mDNSOpaque32;
-typedef packedunion { mDNSu8 b[16]; mDNSu16 w[8]; mDNSu32 l[4]; } mDNSOpaque128;
+typedef union { mDNSu8 b[2]; mDNSu16 NotAnInteger; } mDNSOpaque16;
+typedef union { mDNSu8 b[4]; mDNSu32 NotAnInteger; } mDNSOpaque32;
+typedef union { mDNSu8 b[16]; mDNSu16 w[8]; mDNSu32 l[4]; } mDNSOpaque128;
 
 typedef mDNSOpaque16  mDNSIPPort;		// An IP port is a two-byte opaque identifier (not an integer)
 typedef mDNSOpaque32  mDNSv4Addr;		// An IP address is a four-byte opaque identifier (not an integer)
@@ -571,11 +517,7 @@ enum
 	mStatus_Waiting           = 1,
 	mStatus_NoError           = 0,
 
-	// mDNS return values are in the range FFFE FF00 (-65792) to FFFE FFFF (-65537)
-	// The top end of the range (FFFE FFFF) is used for error codes;
-	// the bottom end of the range (FFFE FF00) is used for non-error values;
-
-	// Error codes:
+	// mDNS Error codes are in the range FFFE FF00 (-65792) to FFFE FFFF (-65537)
 	mStatus_UnknownErr        = -65537,		// 0xFFFE FFFF
 	mStatus_NoSuchNameErr     = -65538,
 	mStatus_NoMemoryErr       = -65539,
@@ -589,14 +531,8 @@ enum
 	mStatus_AlreadyRegistered = -65547,
 	mStatus_NameConflict      = -65548,
 	mStatus_Invalid           = -65549,
-	//                        = -65550,
+	mStatus_GrowCache         = -65550,
 	mStatus_Incompatible      = -65551,
-	mStatus_BadInterfaceErr   = -65552,
-
-	// -65553 - -65789 currently unused
-
-	// Non-error values:
-	mStatus_GrowCache         = -65790,
 	mStatus_ConfigChanged     = -65791,
 	mStatus_MemFree           = -65792		// 0xFFFE FF00
 	};
@@ -612,21 +548,6 @@ typedef struct { mDNSu8 c[ 64]; } domainlabel;		// One label: length byte and up
 typedef struct { mDNSu8 c[256]; } domainname;		// Up to 255 bytes of length-prefixed domainlabels
 
 typedef struct { mDNSu8 c[256]; } UTF8str255;		// Null-terminated C string
-
-// The longest legal textual form of a DNS name is 1005 bytes, including the C-string terminating NULL at the end.
-// Explanation:
-// When a native domainname object is converted to printable textual form using ConvertDomainNameToCString(),
-// non-printing characters are represented in the conventional DNS way, as '\ddd', where ddd is a three-digit decimal number.
-// The longest legal domain name is 255 bytes, in the form of four labels as shown below:
-// Length byte, 63 data bytes, length byte, 63 data bytes, length byte, 63 data bytes, length byte, 61 data bytes, zero byte.
-// Each label is encoded textually as characters followed by a trailing dot.
-// If every character has to be represented as a four-byte escape sequence, then this makes the maximum textual form four labels
-// plus the C-string terminating NULL as shown below:
-// 63*4+1 + 63*4+1 + 63*4+1 + 61*4+1 + 1 = 1005.
-// Note that MAX_ESCAPED_DOMAIN_LABEL is not normally used: If you're only decoding a single label, escaping is usually not required.
-// It is for domain names, where dots are used as label separators, that proper escaping is vital.
-#define MAX_ESCAPED_DOMAIN_LABEL 254
-#define MAX_ESCAPED_DOMAIN_NAME 1005
 
 // ***************************************************************************
 #if 0
@@ -710,8 +631,8 @@ enum
 	kDNSRecordTypePacketUniqueMask = 0x20	// True for PacketAddUnique and PacketAnsUnique
 	};
 
-typedef packedstruct { mDNSu16 priority; mDNSu16 weight; mDNSIPPort port; domainname target; } rdataSRV;
-typedef packedstruct { mDNSu16 preference; domainname exchange; } rdataMX;
+typedef struct { mDNSu16 priority; mDNSu16 weight; mDNSIPPort port; domainname target; } rdataSRV;
+typedef struct { mDNSu16 preference; domainname exchange; } rdataMX;
 
 // StandardAuthRDSize is 264 (256+8), which is large enough to hold a maximum-sized SRV record
 // MaximumRDSize is 8K the absolute maximum we support (at least for now)
@@ -914,7 +835,7 @@ struct ServiceRecordSet_struct
 	AuthRecord          *SubTypes;
 	mDNSBool             Conflict;	// Set if this record set was forcibly deregistered because of a conflict
 	domainname           Host;		// Set if this service record does not use the standard target host name
-	AuthRecord           RR_ADV;	// e.g. _services._dns-sd._udp.local. PTR _printer._tcp.local.
+	AuthRecord           RR_ADV;	// e.g. _services._mdns._udp.local. PTR _printer._tcp.local.
 	AuthRecord           RR_PTR;	// e.g. _printer._tcp.local.        PTR Name._printer._tcp.local.
 	AuthRecord           RR_SRV;	// e.g. Name._printer._tcp.local.   SRV 0 0 port target
 	AuthRecord           RR_TXT;	// e.g. Name._printer._tcp.local.   TXT PrintQueueName
@@ -947,8 +868,8 @@ struct DNSQuestion_struct
 	// Internal state fields. These are used internally by mDNSCore; the client layer needn't be concerned with them.
 	DNSQuestion          *next;
 	mDNSu32               qnamehash;
-	mDNSs32               LastQTime;		// Last scheduled transmission of this Q on *all* applicable interfaces
-	mDNSs32               ThisQInterval;	// LastQTime + ThisQInterval is the next scheduled transmission of this Q
+	mDNSs32               LastQTime;		// Last scheduled tranmission of this Q on *all* applicable interfaces
+	mDNSs32               ThisQInterval;	// LastQTime + ThisQInterval is the next scheduled tranmission of this Q
 											// ThisQInterval > 0 for an active question;
 											// ThisQInterval = 0 for a suspended question that's still in the list
 											// ThisQInterval = -1 for a cancelled question that's been removed from the list
@@ -1073,7 +994,6 @@ struct mDNS_struct
 	mDNSu32 rrcache_report;
 	CacheRecord *rrcache_free;
 	CacheRecord *rrcache_hash[CACHE_HASH_SLOTS];
-	CacheRecord **rrcache_tail[CACHE_HASH_SLOTS];
 	mDNSu32 rrcache_used[CACHE_HASH_SLOTS];
 
 	// Fields below only required for mDNS Responder...
@@ -1121,16 +1041,6 @@ extern const mDNSAddr        AllDNSLinkGroup_v6;
 
 // Every client should call mDNS_Init, passing in storage for the mDNS object, mDNS_PlatformSupport object, and rrcache.
 // The rrcachesize parameter is the size of (i.e. number of entries in) the rrcache array passed in.
-// Most clients use mDNS_Init_AdvertiseLocalAddresses. This causes mDNSCore to automatically
-// create the correct address records for all the hosts interfaces. If you plan to advertise
-// services being offered by the local machine, this is almost always what you want.
-// There are two cases where you might use mDNS_Init_DontAdvertiseLocalAddresses:
-// 1. A client-only device, that browses for services but doesn't advertise any of its own.
-// 2. A proxy-registration service, that advertises services being offered by other machines, and takes
-//    the appropriate steps to manually create the correct address records for those other machines.
-// In principle, a proxy-like registration service could manually create address records for its own machine too,
-// but this would be pointless extra effort when using mDNS_Init_AdvertiseLocalAddresses does that for you.
-//
 // When mDNS has finished setting up the client's callback is called
 // A client can also spin and poll the mDNSPlatformStatus field to see when it changes from mStatus_Waiting to mStatus_NoError
 //
@@ -1145,26 +1055,24 @@ extern const mDNSAddr        AllDNSLinkGroup_v6;
 // is received containing a record which matches the question, the DNSQuestion's mDNSAnswerCallback function will be called
 // Call mDNS_StopQuery when no more answers are required
 //
-// Care should be taken on multi-threaded or interrupt-driven environments.
-// The main mDNS routines call mDNSPlatformLock() on entry and mDNSPlatformUnlock() on exit;
-// each platform layer needs to implement these appropriately for its respective platform.
-// For example, if the support code on a particular platform implements timer callbacks at interrupt time, then
-// mDNSPlatformLock/Unlock need to disable interrupts or do similar concurrency control to ensure that the mDNS
-// code is not entered by an interrupt-time timer callback while in the middle of processing a client call.
+// The mDNS routines are intentionally not thread-safe -- adding locking operations would add overhead that may not
+// be necessary or appropriate on every platform. Instead, code in a pre-emptive environment calling any mDNS routine
+// (except mDNS_Init and mDNS_Close) is responsible for doing the necessary synchronization to ensure that mDNS code is
+// not re-entered. This includes both client software above mDNS, and the platform support code below. For example, if
+// the support code on a particular platform implements timer callbacks at interrupt time, then clients on that platform
+// need to disable interrupts or do similar concurrency control to ensure that the mDNS code is not entered by an
+// interrupt-time timer callback while in the middle of processing a client call.
 
 extern mStatus mDNS_Init      (mDNS *const m, mDNS_PlatformSupport *const p,
 								CacheRecord *rrcachestorage, mDNSu32 rrcachesize,
 								mDNSBool AdvertiseLocalAddresses,
 								mDNSCallback *Callback, void *Context);
-// See notes above on use of NoCache/ZeroCacheSize
 #define mDNS_Init_NoCache                     mDNSNULL
 #define mDNS_Init_ZeroCacheSize               0
-// See notes above on use of Advertise/DontAdvertiseLocalAddresses
 #define mDNS_Init_AdvertiseLocalAddresses     mDNStrue
 #define mDNS_Init_DontAdvertiseLocalAddresses mDNSfalse
 #define mDNS_Init_NoInitCallback              mDNSNULL
 #define mDNS_Init_NoInitCallbackContext       mDNSNULL
-
 extern void    mDNS_GrowCache (mDNS *const m, CacheRecord *storage, mDNSu32 numrecords);
 extern void    mDNS_Close     (mDNS *const m);
 extern mDNSs32 mDNS_Execute   (mDNS *const m);
@@ -1246,10 +1154,7 @@ typedef enum
 	} mDNS_DomainType;
 
 extern mStatus mDNS_GetDomains(mDNS *const m, DNSQuestion *const question, mDNS_DomainType DomainType, const mDNSInterfaceID InterfaceID, mDNSQuestionCallback *Callback, void *Context);
-// In the Panther mDNSResponder we don't do unicast queries yet, so there's no point trying to do domain enumeration
-// mDNS_GetDomains() and mDNS_StopGetDomains() are set to be no-ops so that clients don't try to do browse/register operations that will fail
-//#define        mDNS_StopGetDomains mDNS_StopQuery
-#define        mDNS_StopGetDomains(m,q) ((void)(m),(void)(q))
+#define        mDNS_StopGetDomains mDNS_StopQuery
 extern mStatus mDNS_AdvertiseDomains(mDNS *const m, AuthRecord *rr, mDNS_DomainType DomainType, const mDNSInterfaceID InterfaceID, char *domname);
 #define        mDNS_StopAdvertiseDomains mDNS_Deregister
 
@@ -1262,12 +1167,6 @@ extern mStatus mDNS_AdvertiseDomains(mDNS *const m, AuthRecord *rr, mDNS_DomainT
 // in domain name labels, including unlikely characters like ascii nulls and even dots) all the mDNS APIs
 // work with DNS's native length-prefixed strings. For convenience in C, the following utility functions
 // are provided for converting between C's null-terminated strings and DNS's length-prefixed strings.
-
-// Assignment
-// A simple C structure assignment of a domainname can cause a protection fault by accessing unmapped memory,
-// because that object is defined to be 256 bytes long, but not all domainname objects are truly the full size.
-// This macro uses mDNSPlatformMemCopy() to make sure it only touches the actual bytes that are valid.
-#define AssignDomainName(DST, SRC) mDNSPlatformMemCopy((SRC).c, (DST).c, DomainNameLength(&(SRC)))
 
 // Comparison functions
 extern mDNSBool SameDomainLabel(const mDNSu8 *a, const mDNSu8 *b);
@@ -1296,12 +1195,6 @@ extern mDNSBool MakeDomainLabelFromLiteralString(domainlabel *const label, const
 extern mDNSu8  *MakeDomainNameFromDNSNameString (domainname  *const name,  const char *cstr);
 
 // Convert native format domainlabel or domainname back to C string format
-// IMPORTANT:
-// When using ConvertDomainLabelToCString, the target buffer must be MAX_ESCAPED_DOMAIN_LABEL (254) bytes long
-// to guarantee there will be no buffer overrun. It is only safe to use a buffer shorter than this in rare cases
-// where the label is known to be constrained somehow (for example, if the label is known to be either "_tcp" or "_udp").
-// Similarly, when using ConvertDomainNameToCString, the target buffer must be MAX_ESCAPED_DOMAIN_NAME (1005) bytes long.
-// See definitions of MAX_ESCAPED_DOMAIN_LABEL and MAX_ESCAPED_DOMAIN_NAME for more detailed explanation.
 extern char    *ConvertDomainLabelToCString_withescape(const domainlabel *const name, char *cstr, char esc);
 #define         ConvertDomainLabelToCString_unescaped(D,C) ConvertDomainLabelToCString_withescape((D), (C), 0)
 #define         ConvertDomainLabelToCString(D,C)           ConvertDomainLabelToCString_withescape((D), (C), '\\')
@@ -1337,131 +1230,6 @@ extern char *GetRRDisplayString_rdb(mDNS *const m, const ResourceRecord *rr, RDa
 #define GetRRDisplayString(m, rr) GetRRDisplayString_rdb((m), &(rr)->resrec, &(rr)->resrec.rdata->u)
 extern mDNSBool mDNSSameAddress(const mDNSAddr *ip1, const mDNSAddr *ip2);
 extern void IncrementLabelSuffix(domainlabel *name, mDNSBool RichText);
-
-// ***************************************************************************
-#if 0
-#pragma mark - PlatformSupport interface
-#endif
-
-// This section defines the interface to the Platform Support layer.
-// Normal client code should not use any of types defined here, or directly call any of the functions defined here.
-// The definitions are placed here because sometimes clients do use these calls indirectly, via other supported client operations.
-// For example, AssignDomainName is a macro defined using mDNSPlatformMemCopy()
-
-typedef packedstruct
-	{
-	mDNSOpaque16 id;
-	mDNSOpaque16 flags;
-	mDNSu16 numQuestions;
-	mDNSu16 numAnswers;
-	mDNSu16 numAuthorities;
-	mDNSu16 numAdditionals;
-	} DNSMessageHeader;
-
-// We can send and receive packets up to 9000 bytes (Ethernet Jumbo Frame size, if that ever becomes widely used)
-// However, in the normal case we try to limit packets to 1500 bytes so that we don't get IP fragmentation on standard Ethernet
-// 40 (IPv6 header) + 8 (UDP header) + 12 (DNS message header) + 1440 (DNS message body) = 1500 total
-#define AbsoluteMaxDNSMessageData 8940
-#define NormalMaxDNSMessageData 1440
-typedef packedstruct
-	{
-	DNSMessageHeader h;						// Note: Size 12 bytes
-	mDNSu8 data[AbsoluteMaxDNSMessageData];	// 40 (IPv6) + 8 (UDP) + 12 (DNS header) + 8940 (data) = 9000
-	} DNSMessage;
-
-// Every platform support module must provide the following functions.
-// mDNSPlatformInit() typically opens a communication endpoint, and starts listening for mDNS packets.
-// When Setup is complete, the platform support layer calls mDNSCoreInitComplete().
-// mDNSPlatformSendUDP() sends one UDP packet
-// When a packet is received, the PlatformSupport code calls mDNSCoreReceive()
-// mDNSPlatformClose() tidies up on exit
-// Note: mDNSPlatformMemAllocate/mDNSPlatformMemFree are only required for handling oversized resource records.
-// If your target platform has a well-defined specialized application, and you know that all the records it uses
-// are InlineCacheRDSize or less, then you can just make a simple mDNSPlatformMemAllocate() stub that always returns
-// NULL. InlineCacheRDSize is a compile-time constant, which is set by default to 64. If you need to handle records
-// a little larger than this and you don't want to have to implement run-time allocation and freeing, then you
-// can raise the value of this constant to a suitable value (at the expense of increased memory usage).
-extern mStatus  mDNSPlatformInit        (mDNS *const m);
-extern void     mDNSPlatformClose       (mDNS *const m);
-extern mStatus  mDNSPlatformSendUDP(const mDNS *const m, const DNSMessage *const msg, const mDNSu8 *const end,
-	mDNSInterfaceID InterfaceID, mDNSIPPort srcport, const mDNSAddr *dst, mDNSIPPort dstport);
-
-extern void     mDNSPlatformLock        (const mDNS *const m);
-extern void     mDNSPlatformUnlock      (const mDNS *const m);
-
-extern void     mDNSPlatformStrCopy     (const void *src,       void *dst);
-extern mDNSu32  mDNSPlatformStrLen      (const void *src);
-extern void     mDNSPlatformMemCopy     (const void *src,       void *dst, mDNSu32 len);
-extern mDNSBool mDNSPlatformMemSame     (const void *src, const void *dst, mDNSu32 len);
-extern void     mDNSPlatformMemZero     (                       void *dst, mDNSu32 len);
-extern void *   mDNSPlatformMemAllocate (mDNSu32 len);
-extern void     mDNSPlatformMemFree     (void *mem);
-extern mStatus  mDNSPlatformTimeInit    (mDNSs32 *timenow);
-
-// The core mDNS code provides these functions, for the platform support code to call at appropriate times
-//
-// mDNS_GenerateFQDN() is called once on startup (typically from mDNSPlatformInit())
-// and then again on each subsequent change of the dot-local host name.
-//
-// mDNS_RegisterInterface() is used by the platform support layer to inform mDNSCore of what
-// physical and/or logical interfaces are available for sending and receiving packets.
-// Typically it is called on startup for each available interface, but register/deregister may be
-// called again later, on multiple occasions, to inform the core of interface configuration changes.
-// If set->Advertise is set non-zero, then mDNS_RegisterInterface() also registers the standard
-// resource records that should be associated with every publicised IP address/interface:
-// -- Name-to-address records (A/AAAA)
-// -- Address-to-name records (PTR)
-// -- Host information (HINFO)
-//
-// mDNSCoreInitComplete() is called when the platform support layer is finished.
-// Typically this is at the end of mDNSPlatformInit(), but may be later
-// (on platforms like OT that allow asynchronous initialization of the networking stack).
-//
-// mDNSCoreReceive() is called when a UDP packet is received
-//
-// mDNSCoreMachineSleep() is called when the machine sleeps or wakes
-// (This refers to heavyweight laptop-style sleep/wake that disables network access,
-// not lightweight second-by-second CPU power management modes.)
-
-extern void     mDNS_GenerateFQDN(mDNS *const m);
-extern mStatus  mDNS_RegisterInterface  (mDNS *const m, NetworkInterfaceInfo *set);
-extern void     mDNS_DeregisterInterface(mDNS *const m, NetworkInterfaceInfo *set);
-extern void     mDNSCoreInitComplete(mDNS *const m, mStatus result);
-extern void     mDNSCoreReceive(mDNS *const m, DNSMessage *const msg, const mDNSu8 *const end,
-								const mDNSAddr *const srcaddr, const mDNSIPPort srcport,
-								const mDNSAddr *const dstaddr, const mDNSIPPort dstport, const mDNSInterfaceID InterfaceID, mDNSu8 ttl);
-extern void     mDNSCoreMachineSleep(mDNS *const m, mDNSBool wake);
-
-// ***************************************************************************
-#if 0
-#pragma mark - Compile-Time assertion checks
-#endif
-
-// Some C compiler cleverness. We can make the compiler check certain things for
-// us, and report compile-time errors if anything is wrong. The usual way to do
-// this would be to use a run-time "if" statement, but then you don't find out
-// what's wrong until you run the software. This way, if the assertion condition
-// is false, the array size is negative, and the complier complains immediately.
-
-struct mDNS_CompileTimeAssertionChecks
-	{
-	// Check that the compiler generated our on-the-wire packet format structure definitions
-	// properly packed, without adding padding bytes to align fields on 32-bit or 64-bit boundaries.
-	char assert0[(sizeof(rdataSRV)         == 262                          ) ? 1 : -1];
-	char assert1[(sizeof(DNSMessageHeader) ==  12                          ) ? 1 : -1];
-	char assert2[(sizeof(DNSMessage)       ==  12+AbsoluteMaxDNSMessageData) ? 1 : -1];
-	char assert3[(sizeof(mDNSs8)           ==   1                          ) ? 1 : -1];
-	char assert4[(sizeof(mDNSu8)           ==   1                          ) ? 1 : -1];
-	char assert5[(sizeof(mDNSs16)          ==   2                          ) ? 1 : -1];
-	char assert6[(sizeof(mDNSu16)          ==   2                          ) ? 1 : -1];
-	char assert7[(sizeof(mDNSs32)          ==   4                          ) ? 1 : -1];
-	char assert8[(sizeof(mDNSu32)          ==   4                          ) ? 1 : -1];
-	char assert9[(sizeof(mDNSOpaque16)     ==   2                          ) ? 1 : -1];
-	char assertA[(sizeof(mDNSOpaque32)     ==   4                          ) ? 1 : -1];
-	char assertB[(sizeof(mDNSOpaque128)    ==  16                          ) ? 1 : -1];
-	};
-
-// ***************************************************************************
 
 #ifdef	__cplusplus
 	}

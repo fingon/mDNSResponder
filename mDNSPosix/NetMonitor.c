@@ -36,12 +36,6 @@
     Change History (most recent first):
 
 $Log: NetMonitor.c,v $
-Revision 1.49  2003/10/30 19:38:56  cheshire
-Fix warning on certain compilers
-
-Revision 1.48  2003/10/30 19:30:00  cheshire
-Fix warnings on certain compilers
-
 Revision 1.47  2003/09/05 18:49:57  cheshire
 Add total packet size to display
 
@@ -313,7 +307,7 @@ typedef enum
 	HostPkt_L        = 1,		// Legacy Query
 	HostPkt_R        = 2,		// Response
 	HostPkt_B        = 3,		// Bad
-	HostPkt_NumTypes = 4
+	HostPkt_NumTypes = 4,
 	} HostPkt_Type;
 
 typedef struct
@@ -635,11 +629,12 @@ mDNSlocal void DisplayQuery(mDNS *const m, const DNSMessage *const msg, const mD
 	for (i=0; i<msg->h.numQuestions; i++)
 		{
 		DNSQuestion q;
-		mDNSu8 *p2 = (mDNSu8 *)getQuestion(msg, ptr, end, InterfaceID, &q);
+		mDNSu8 *p2;
+		const mDNSu8 *ep = ptr;
+		ptr = getQuestion(msg, ptr, end, InterfaceID, &q);
+		if (!ptr) { DisplayError(srcaddr, ep, end, "QUESTION"); return; }
 		mDNSu16 ucbit = q.qclass & kDNSQClass_UnicastResponse;
 		q.qclass &= ~kDNSQClass_UnicastResponse;
-		if (!p2) { DisplayError(srcaddr, ptr, end, "QUESTION"); return; }
-		ptr = p2;
 		p2 = (mDNSu8 *)FindUpdate(m, msg, auth, end, &q, &pkt);
 		if (p2)
 			{
@@ -753,12 +748,12 @@ mDNSexport void mDNSCoreReceive(mDNS *const m, DNSMessage *const msg, const mDNS
 	const mDNSu8 StdQ = kDNSFlag0_QR_Query    | kDNSFlag0_OP_StdQuery;
 	const mDNSu8 StdR = kDNSFlag0_QR_Response | kDNSFlag0_OP_StdQuery;
 	const mDNSu8 QR_OP = (mDNSu8)(msg->h.flags.b[0] & kDNSFlag0_QROP_Mask);
-	mDNSu8 *ptr = (mDNSu8 *)&msg->h.numQuestions;
 
 	(void)dstaddr;	// Unused
 	(void)dstport;	// Unused
 	
 	// Read the integer parts which are in IETF byte-order (MSB first, LSB second)
+	mDNSu8 *ptr = (mDNSu8 *)&msg->h.numQuestions;
 	msg->h.numQuestions   = (mDNSu16)((mDNSu16)ptr[0] <<  8 | ptr[1]);
 	msg->h.numAnswers     = (mDNSu16)((mDNSu16)ptr[2] <<  8 | ptr[3]);
 	msg->h.numAuthorities = (mDNSu16)((mDNSu16)ptr[4] <<  8 | ptr[5]);
@@ -868,7 +863,6 @@ mDNSexport int main(int argc, char **argv)
 
 	for (i=1; i<argc; i++)
 		{
-		FilterList *f;
 		struct in_addr s4;
 		struct in6_addr s6;
 		mDNSAddr a;
@@ -888,7 +882,7 @@ mDNSexport int main(int argc, char **argv)
 			else goto usage;
 			}
 		
-		f = malloc(sizeof(*f));
+		FilterList *f = malloc(sizeof(*f));
 		f->FilterAddr = a;
 		f->next = Filters;
 		Filters = f;
