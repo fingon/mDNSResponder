@@ -3,6 +3,8 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
+ * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -22,11 +24,41 @@
 
 	Contains:	mDNS platform plugin for VxWorks.
 
-	Copyright:  Copyright (C) 2002-2003 Apple Computer, Inc., All Rights Reserved.
+	Copyright:  Copyright (C) 2002-2004 Apple Computer, Inc., All Rights Reserved.
 
 	Change History (most recent first):
 
 $Log: mDNSVxWorks.c,v $
+Revision 1.16  2004/04/22 05:11:28  bradley
+Added mDNSPlatformUTC for TSIG signed dynamic updates.
+
+Revision 1.15  2004/04/21 02:49:12  cheshire
+To reduce future confusion, renamed 'TxAndRx' to 'McastTxRx'
+
+Revision 1.14  2004/04/09 17:43:04  cheshire
+Make sure to set the McastTxRx field so that duplicate suppression works correctly
+
+Revision 1.13  2004/01/27 20:15:24  cheshire
+<rdar://problem/3541288>: Time to prune obsolete code for listening on port 53
+
+Revision 1.12  2004/01/24 09:12:37  bradley
+Avoid TOS socket options to workaround a TOS routing problem with VxWorks and multiple interfaces
+when sending unicast responses, which resulted in packets going out the wrong interface.
+
+Revision 1.11  2004/01/24 04:59:16  cheshire
+Fixes so that Posix/Linux, OS9, Windows, and VxWorks targets build again
+
+Revision 1.10  2003/11/14 21:27:09  cheshire
+<rdar://problem/3484766>: Security: Crashing bug in mDNSResponder
+Fix code that should use buffer size MAX_ESCAPED_DOMAIN_NAME (1005) instead of 256-byte buffers.
+
+Revision 1.9  2003/11/14 20:59:09  cheshire
+Clients can't use AssignDomainName macro because mDNSPlatformMemCopy is defined in mDNSPlatformFunctions.h.
+Best solution is just to combine mDNSClientAPI.h and mDNSPlatformFunctions.h into a single file.
+
+Revision 1.8  2003/10/28 10:08:27  bradley
+Removed legacy port 53 support as it is no longer needed.
+
 Revision 1.7  2003/08/20 05:58:54  bradley
 Removed dependence on modified mDNSCore: define structures/prototypes locally.
 
@@ -101,7 +133,6 @@ mDNS platform plugin for VxWorks.
 #endif
 
 #include	"mDNSClientAPI.h"
-#include	"mDNSPlatformFunctions.h"
 
 #include	"mDNSVxWorks.h"
 
@@ -163,7 +194,6 @@ struct	MDNSInterfaceItem
 	MDNSInterfaceItem *			next;
 	char						name[ 32 ];
 	MDNSSocketRef				multicastSocketRef;
-	MDNSSocketRef				unicastSocketRef;
 	MDNSSocketRef				sendingSocketRef;
 	NetworkInterfaceInfo		hostSet;
 	mDNSBool					hostRegistered;
@@ -172,8 +202,7 @@ struct	MDNSInterfaceItem
 	int							sendUnicastCounter;
 	int							sendErrorCounter;
 	
-	int							recvMulticastCounter;
-	int							recvUnicastCounter;
+	int							recvCounter;
 	int							recvErrorCounter;
 	int							recvLoopCounter;
 };
@@ -435,7 +464,6 @@ mStatus
 		const DNSMessage * const	inMsg, 
 		const mDNSu8 * const		inMsgEnd, 
 		mDNSInterfaceID 			inInterfaceID, 
-		mDNSIPPort					inSrcPort, 
 		const mDNSAddr *			inDstIP, 
 		mDNSIPPort 					inDstPort )
 {
@@ -443,8 +471,6 @@ mStatus
 	MDNSInterfaceItem *		item;
 	struct sockaddr_in		addr;
 	int						n;
-	
-	DEBUG_UNUSED( inSrcPort );
 	
 	dlog( kDebugLevelChatty, DEBUG_NAME "platform send UDP\n" );
 	
@@ -501,6 +527,43 @@ exit:
 	dlog( kDebugLevelChatty, DEBUG_NAME "platform send UDP done\n" );
 	return( err );
 }
+
+//===========================================================================================================================
+//	Connection-oriented (TCP) functions
+//===========================================================================================================================
+
+mDNSexport mStatus mDNSPlatformTCPConnect(const mDNSAddr *dst, mDNSOpaque16 dstport, mDNSInterfaceID InterfaceID,
+										  TCPConnectionCallback callback, void *context, int *descriptor)
+	{
+	(void)dst;			// Unused
+	(void)dstport;		// Unused
+	(void)InterfaceID;	// Unused
+	(void)callback;		// Unused
+	(void)context;		// Unused
+	(void)descriptor;	// Unused
+	return(mStatus_UnsupportedErr);
+	}
+
+mDNSexport void mDNSPlatformTCPCloseConnection(int sd)
+	{
+	(void)sd;			// Unused
+	}
+
+mDNSexport int mDNSPlatformReadTCP(int sd, void *buf, int buflen)
+	{
+	(void)sd;			// Unused
+	(void)buf;			// Unused
+	(void)buflen;			// Unused
+	return(0);
+	}
+
+mDNSexport int mDNSPlatformWriteTCP(int sd, const char *msg, int len)
+	{
+	(void)sd;			// Unused
+	(void)msg;			// Unused
+	(void)len;			// Unused
+	return(0);
+	}
 
 //===========================================================================================================================
 //	mDNSPlatformLock
@@ -659,6 +722,15 @@ mDNSexport mStatus mDNSPlatformTimeInit( mDNSs32 *outTimeNow )
 mDNSs32	mDNSPlatformTimeNow( void )
 {
 	return( (mDNSs32) tickGet() );
+}
+
+//===========================================================================================================================
+//	mDNSPlatformUTC
+//===========================================================================================================================
+
+mDNSexport mDNSs32	mDNSPlatformUTC( void )
+{
+	return( -1 );
 }
 
 //===========================================================================================================================
@@ -963,7 +1035,6 @@ mDNSlocal mStatus	SetupInterface( mDNS * const inMDNS, const struct ifaddrs *inA
 	require_action( item, exit, err = mStatus_NoMemoryErr );
 	strcpy( item->name, inAddr->ifa_name );
 	item->multicastSocketRef	= kInvalidSocketRef;
-	item->unicastSocketRef		= kInvalidSocketRef;
 	item->sendingSocketRef		= kInvalidSocketRef;
 	
 	// Set up the multicast DNS (port 5353) socket for this interface.
@@ -971,13 +1042,7 @@ mDNSlocal mStatus	SetupInterface( mDNS * const inMDNS, const struct ifaddrs *inA
 	err = SetupSocket( inMDNS, inAddr, MulticastDNSPort, &socketRef );
 	require_noerr( err, exit );
 	item->multicastSocketRef = socketRef;
-	
-	// Set up the unicast DNS (port 53) socket for this interface (to handle normal DNS requests).
-	
-	err = SetupSocket( inMDNS, inAddr, UnicastDNSPort, &socketRef );
-	require_noerr( err, exit );
-	item->unicastSocketRef = socketRef;
-	
+		
 	// Set up the sending socket for this interface.
 	
 	err = SetupSocket( inMDNS, inAddr, zeroIPPort, &socketRef );
@@ -990,6 +1055,7 @@ mDNSlocal mStatus	SetupInterface( mDNS * const inMDNS, const struct ifaddrs *inA
 	item->hostSet.ip.type 				= mDNSAddrType_IPv4;
 	item->hostSet.ip.ip.v4.NotAnInteger	= ipv4->sin_addr.s_addr;
 	item->hostSet.Advertise       		= inMDNS->AdvertiseLocalAddresses;
+	item->hostSet.McastTxRx       		= mDNStrue;
 
 	err = mDNS_RegisterInterface( inMDNS, &item->hostSet );
 	require_noerr( err, exit );
@@ -1045,17 +1111,7 @@ mDNSlocal mStatus	TearDownInterface( mDNS * const inMDNS, MDNSInterfaceItem *inI
 		dlog( kDebugLevelVerbose, DEBUG_NAME "tearing down multicast socket %d\n", socketRef );
 		close( socketRef );
 	}
-	
-	// Close the unicast socket.
-	
-	socketRef = inItem->unicastSocketRef;
-	inItem->unicastSocketRef = kInvalidSocketRef;
-	if( socketRef != kInvalidSocketRef )
-	{
-		dlog( kDebugLevelVerbose, DEBUG_NAME "tearing down unicast socket %d\n", socketRef );
-		close( socketRef );
-	}
-	
+		
 	// Close the sending socket.
 	
 	socketRef = inItem->sendingSocketRef;
@@ -1105,7 +1161,7 @@ mDNSlocal mStatus
 	require_errno_action( socketRef, errno, exit, err = mStatus_UnknownErr );
 		
 	// A port of zero means this socket is for sending and should be set up for sending. Otherwise, it is for receiving 
-	// and should be set up for receiving. The reason for separate sending vs receiving sockets to workaround problems
+	// and should be set up for receiving. The reason for separate sending vs receiving sockets is to workaround problems
 	// with VxWorks IP stack when using dynamic IP configuration such as DHCP (problems binding to wildcard IP when the
 	// IP address later changes). Since we have to bind the Multicast DNS address to workaround these issues we have to
 	// use a separate sending socket since it is illegal to send a packet with a multicast source address (RFC 1122).
@@ -1126,7 +1182,7 @@ mDNSlocal mStatus
 		err = setsockopt( socketRef, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *) &mreq, sizeof( mreq ) );
 		check_errno( err, errno );
 		
-		// Bind to the multicast DNS address and specified port (53 for unicast or 5353 for multicast).
+		// Bind to the multicast DNS address and port 5353.
 		
 		memset( &addr, 0, sizeof( addr ) );
 		addr.sin_family 		= AF_INET;
@@ -1168,12 +1224,17 @@ mDNSlocal mStatus
 		err = setsockopt( socketRef, IPPROTO_IP, IP_MULTICAST_TTL, (char *) &optionByte, sizeof( optionByte ) );
 		check_errno( err, errno );
 		
+		// WARNING: Setting this option causes unicast responses to be routed to the wrong interface so they are 
+		// WARNING: disabled. These options were only hints to improve 802.11 performance (and not implemented) anyway.
+		
+#if 0
 		// Mark packets as high-throughput/low-delay (i.e. lowest reliability) to maximize 802.11 multicast rate.
 		
 		option = IPTOS_LOWDELAY | IPTOS_THROUGHPUT;
 		err = setsockopt( socketRef, IPPROTO_IP, IP_TOS, (char *) &option, sizeof( option ) );
 		check_errno( err, errno );
-		
+#endif
+	
 		dlog( kDebugLevelVerbose, DEBUG_NAME "setting up sending socket done (%s, %u.%u.%u.%u, %d)\n", 
 			  inAddr->ifa_name, ip.b[ 0 ], ip.b[ 1 ], ip.b[ 2 ], ip.b[ 3 ], socketRef );
 	}
@@ -1477,11 +1538,6 @@ mDNSlocal void	Task( mDNS *inMDNS )
 					TaskProcessPacket( inMDNS, item, item->multicastSocketRef );
 					++n;
 				}
-				if( FD_ISSET( item->unicastSocketRef, &readSet ) )
-				{
-					TaskProcessPacket( inMDNS, item, item->unicastSocketRef );
-					++n;
-				}
 			}
 			
 			// Check for a pending command and process it.
@@ -1560,14 +1616,9 @@ mDNSlocal void	TaskSetupReadSet( mDNS *inMDNS, fd_set *outReadSet, int *outMaxSo
 	for( item = inMDNS->p->interfaceList; item; item = item->next )
 	{
 		FD_SET( item->multicastSocketRef, outReadSet );
-		FD_SET( item->unicastSocketRef, outReadSet );
 		if( item->multicastSocketRef > maxSocket )
 		{
 			maxSocket = item->multicastSocketRef;
-		}
-		if( item->unicastSocketRef > maxSocket )
-		{
-			maxSocket = item->unicastSocketRef;
 		}
 	}
 	
@@ -1629,7 +1680,6 @@ mDNSlocal void	TaskSetupTimeout( mDNSs32 inNextTaskTime, struct timeval *outTime
 mDNSlocal void	TaskProcessPacket( mDNS *inMDNS, MDNSInterfaceItem *inItem, MDNSSocketRef inSocketRef )
 {
 	int						n;
-	mDNSBool				isMulticast;
 	DNSMessage				packet;
 	struct sockaddr_in		addr;
 	int						addrSize;
@@ -1638,9 +1688,7 @@ mDNSlocal void	TaskProcessPacket( mDNS *inMDNS, MDNSInterfaceItem *inItem, MDNSS
 	mDNSIPPort				srcPort;
 	mDNSAddr				dstAddr;
 	mDNSIPPort				dstPort;
-	
-	isMulticast = ( inSocketRef == inItem->multicastSocketRef );
-	
+		
 	// Receive the packet.
 	
 	addrSize = sizeof( addr );
@@ -1654,8 +1702,8 @@ mDNSlocal void	TaskProcessPacket( mDNS *inMDNS, MDNSInterfaceItem *inItem, MDNSS
 		srcAddr.ip.v4.NotAnInteger 	= addr.sin_addr.s_addr;
 		srcPort.NotAnInteger		= addr.sin_port;
 		dstAddr.type				= mDNSAddrType_IPv4;
-		dstAddr.ip.v4				= isMulticast ? AllDNSLinkGroup  : inItem->hostSet.ip.ip.v4;
-		dstPort						= isMulticast ? MulticastDNSPort : UnicastDNSPort;
+		dstAddr.ip.v4				= AllDNSLinkGroup;
+		dstPort						= MulticastDNSPort;
 		
 		dlog( kDebugLevelChatty, DEBUG_NAME "packet received\n" );
 		dlog( kDebugLevelChatty, DEBUG_NAME "    size      = %d\n", n );
@@ -1676,9 +1724,8 @@ mDNSlocal void	TaskProcessPacket( mDNS *inMDNS, MDNSInterfaceItem *inItem, MDNSS
 	
 	// Update counters.
 	
-	inItem->recvMulticastCounter	+= isMulticast;
-	inItem->recvUnicastCounter		+= !isMulticast;
-	inItem->recvErrorCounter 		+= ( n < 0 );
+	inItem->recvCounter			+= 1;
+	inItem->recvErrorCounter 	+= ( n < 0 );
 }
 
 #if 0
@@ -2010,7 +2057,6 @@ void	mDNSShow( BOOL inShowRecords )
 		printf( "    -- interface %u --\n", n );
 		printf( "        name                           = \"%s\"\n", item->name );
 		printf( "        multicastSocketRef             = %d\n", item->multicastSocketRef );
-		printf( "        unicastSocketRef               = %d\n", item->unicastSocketRef );
 		printf( "        sendingSocketRef               = %d\n", item->sendingSocketRef );
 		ip = item->hostSet.ip;
 		printf( "        hostSet.ip                     = %u.%u.%u.%u\n", ip.ip.v4.b[ 0 ], ip.ip.v4.b[ 1 ], 
@@ -2021,8 +2067,7 @@ void	mDNSShow( BOOL inShowRecords )
 		printf( "        sendMulticastCounter           = %d\n", item->sendMulticastCounter );
 		printf( "        sendUnicastCounter             = %d\n", item->sendUnicastCounter );
 		printf( "        sendErrorCounter               = %d\n", item->sendErrorCounter );
-		printf( "        recvMulticastCounter           = %d\n", item->recvMulticastCounter );
-		printf( "        recvUnicastCounter             = %d\n", item->recvUnicastCounter );
+		printf( "        recvCounter                    = %d\n", item->recvCounter );
 		printf( "        recvErrorCounter               = %d\n", item->recvErrorCounter );
 		printf( "        recvLoopCounter                = %d\n", item->recvLoopCounter );
 		printf( "\n" );
@@ -2046,7 +2091,7 @@ void	mDNSShowRecords( void )
 	MDNSInterfaceItem *		item;
 	int						n;
 	AuthRecord *			record;
-	char					name[ 512 ];
+	char					name[ MAX_ESCAPED_DOMAIN_NAME ];
 	
 	printf( "\n-- mDNS resource records --\n" );
 	n = 1;
