@@ -442,6 +442,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\StdioFileEx.cpp"
+				>
+			</File>
+			<File
 				RelativePath="ThirdPage.cpp"
 				>
 			</File>
@@ -484,6 +488,10 @@
 			</File>
 			<File
 				RelativePath="stdafx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\StdioFileEx.h"
 				>
 			</File>
 			<File
