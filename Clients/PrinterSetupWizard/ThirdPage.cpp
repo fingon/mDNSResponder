@@ -1,46 +1,28 @@
-/* -*- Mode: C; tab-width: 4 -*-
- *
+/*
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
     
 $Log: ThirdPage.cpp,v $
-Revision 1.28  2006/08/14 23:24:09  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.27  2005/10/05 21:41:45  herscher
-<rdar://problem/4190104> Use "application/octet-stream" to determine if CUPS shared queue supports raw
-
-Revision 1.26  2005/07/11 20:17:15  shersche
-<rdar://problem/4124524> UI fixes associated with CUPS printer workaround fix.
-
-Revision 1.25  2005/07/07 17:53:20  shersche
-Fix problems associated with the CUPS printer workaround fix.
-
-Revision 1.24  2005/06/30 18:02:54  shersche
-<rdar://problem/4124524> Workaround for Mac OS X Printer Sharing bug
-
-Revision 1.23  2005/04/18 02:33:47  shersche
-<rdar://problem/4091216> Default printer option cannot be deselected
-
-Revision 1.22  2005/04/13 17:46:22  shersche
-<rdar://problem/4082122> Generic PCL not selected when printers advertise multiple text records
-
-Revision 1.21  2005/03/30 02:09:55  shersche
-Auto-resize the column width to account for differing fonts and font sizes
-
 Revision 1.20  2005/03/05 02:27:45  shersche
 <rdar://problem/4030388> Generic drivers don't do color
 
@@ -201,7 +183,7 @@ CThirdPage::CThirdPage()
 	require_noerr(err, exit);
 
 	//
-	// load our own special generic printer defs
+	// and lastly load our own special generic printer defs
 	//
 	err = LoadGenericPrintDriverDefs( m_manufacturers );
 	require_noerr( err, exit );
@@ -249,7 +231,7 @@ CThirdPage::~CThirdPage()
 //
 // ----------------------------------------------------
 void
-CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model)
+CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturers & manufacturers, Manufacturer * manufacturer, Model * model)
 {
 	LVFINDINFO	info;
 	int			nIndex;
@@ -257,6 +239,8 @@ CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * man
 	check( printer != NULL );
 	check( manufacturer != NULL );
 	check( model != NULL );
+
+	PopulateUI( manufacturers );
 
 	//
 	// select the manufacturer
@@ -289,15 +273,6 @@ CThirdPage::SelectMatch(Printer * printer, Service * service, Manufacturer * man
 	}
 
 	CopyPrinterSettings( printer, service, manufacturer, model );
-}
-
-
-void
-CThirdPage::SelectMatch(Manufacturers & manufacturers, Printer * printer, Service * service, Manufacturer * manufacturer, Model * model)
-{
-	PopulateUI( manufacturers );
-
-	SelectMatch( printer, service, manufacturer, model );
 }
 
 
@@ -849,7 +824,7 @@ CThirdPage::LoadGenericPrintDriverDefs( Manufacturers & manufacturers )
 
 	// First try and find our generic driver names
 
-	iter = m_manufacturers.find(L"HP");
+	iter = manufacturers.find(L"HP");
 	require_action( iter != manufacturers.end(), exit, err = kUnknownErr );
 	manufacturer = iter->second;
 
@@ -1053,7 +1028,7 @@ CThirdPage::NormalizeManufacturerName( const CString & name )
 // MatchManufacturer and MatchModel in turn.
 //
 
-OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * printer, Service * service, bool useCUPSWorkaround)
+OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * printer, Service * service)
 {
 	CString					normalizedProductName;
 	Manufacturer		*	manufacturer		=	NULL;
@@ -1064,27 +1039,20 @@ OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * print
 	CString					text;
 	OSStatus				err					=	kNoErr;
 
-	check( printer );
-	check( service );
-
-	Queue * q = service->SelectedQueue();
-
-	check( q );
-
 	//
 	// first look to see if we have a usb_MFG descriptor
 	//
-	if ( q->usb_MFG.GetLength() > 0)
+	if (service->usb_MFG.GetLength() > 0)
 	{
-		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( q->usb_MFG ) );
+		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( service->usb_MFG ) );
 	}
 
 	if ( manufacturer == NULL )
 	{
-		q->product.Remove('(');
-		q->product.Remove(')');
+		service->product.Remove('(');
+		service->product.Remove(')');
 
-		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( q->product ) );
+		manufacturer = MatchManufacturer( manufacturers, ConvertToManufacturerName ( service->product ) );
 	}
 	
 	//
@@ -1092,48 +1060,25 @@ OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * print
 	//
 	if ( manufacturer != NULL )
 	{
-		if ( q->usb_MDL.GetLength() > 0 )
+		if (service->usb_MDL.GetLength() > 0)
 		{
-			model = MatchModel ( manufacturer, ConvertToModelName ( q->usb_MDL ) );
+			model = MatchModel ( manufacturer, ConvertToModelName ( service->usb_MDL ) );
 		}
 
-		if ( ( model == NULL ) && ( q->product.GetLength() > 0 ) )
+		if ( ( model == NULL ) && ( service->product.GetLength() > 0 ) )
 		{
-			q->product.Remove('(');
-			q->product.Remove(')');
+			service->product.Remove('(');
+			service->product.Remove(')');
 
-			model = MatchModel ( manufacturer, ConvertToModelName ( q->product ) );
+			model = MatchModel ( manufacturer, ConvertToModelName ( service->product ) );
 		}
 
 		if ( model != NULL )
 		{
-			// <rdar://problem/4124524> Offer Generic printers if printer advertises Postscript or PCL.  Workaround
-			// bug in OS X CUPS printer sharing by selecting Generic driver instead of matched printer.
- 
-			bool hasGenericDriver = false;
-
-			if ( MatchGeneric( manufacturers, printer, service, &genericManufacturer, &genericModel ) )
-			{
-				hasGenericDriver = true;
-			}
-
-			// <rdar://problem/4190104> Use "application/octet-stream" to determine if CUPS 
-			// shared queue supports raw
-
-			if ( q->pdl.Find( L"application/octet-stream" ) != -1 )
-			{
-				useCUPSWorkaround = false;
-			}
-
-			if ( useCUPSWorkaround && printer->isSharedFromOSX && hasGenericDriver )
-			{
-				SelectMatch(manufacturers, printer, service, genericManufacturer, genericModel );
-			}
-			else
-			{
-				SelectMatch(manufacturers, printer, service, manufacturer, model);
-			}
-
+			Manufacturers manufacturers;
+			
+			manufacturers[manufacturer->name] = manufacturer;
+			SelectMatch(printer, service, manufacturers, manufacturer, model);
 			found = true;
 		}
 	}
@@ -1146,18 +1091,26 @@ OSStatus CThirdPage::MatchPrinter(Manufacturers & manufacturers, Printer * print
 	{
 		text.LoadString(IDS_PRINTER_MATCH_GOOD);
 	}
-	else if ( MatchGeneric( manufacturers, printer, service, &genericManufacturer, &genericModel ) )
-	{	
-		if ( printer->isSharedFromOSX )
+	else if ( MatchGeneric( printer, service, &genericManufacturer, &genericModel ) )
+	{
+		Manufacturers *	pManufacturers;
+		Manufacturers	manufacturers;
+		
+		text.LoadString(IDS_PRINTER_MATCH_MAYBE);
+		
+		if ( manufacturer )
 		{
-			text.LoadString(IDS_PRINTER_MATCH_GOOD);
+			manufacturers[genericManufacturer->name]	= genericManufacturer;
+			manufacturers[manufacturer->name]			= manufacturer;
+
+			pManufacturers = &manufacturers;
 		}
 		else
 		{
-			text.LoadString(IDS_PRINTER_MATCH_MAYBE);
+			pManufacturers = &m_manufacturers;
 		}
 
-		SelectMatch( manufacturers, printer, service, genericManufacturer, genericModel );
+		SelectMatch( printer, service, *pManufacturers, genericManufacturer, genericModel );
 	}
 	else
 	{
@@ -1294,25 +1247,19 @@ CThirdPage::MatchModel(Manufacturer * manufacturer, const CString & name)
 // specifically
 //
 BOOL
-CThirdPage::MatchGeneric( Manufacturers & manufacturers, Printer * printer, Service * service, Manufacturer ** manufacturer, Model ** model )
+CThirdPage::MatchGeneric( Printer * printer, Service * service, Manufacturer ** manufacturer, Model ** model )
 {
 	CString	pdl;
 	BOOL	ok = FALSE;
 
 	DEBUG_UNUSED( printer );
 
-	check( service );
-
-	Queue * q = service->SelectedQueue();
-
-	check( q );
-
-	Manufacturers::iterator iter = manufacturers.find( kGenericManufacturer );
-	require_action_quiet( iter != manufacturers.end(), exit, ok = FALSE );
+	Manufacturers::iterator iter = m_manufacturers.find( kGenericManufacturer );
+	require_action_quiet( iter != m_manufacturers.end(), exit, ok = FALSE );
 
 	*manufacturer = iter->second;
 
-	pdl = q->pdl;
+	pdl = service->pdl;
 	pdl.MakeLower();
 
 	if ( pdl.Find( kPDLPCLKey ) != -1 )
@@ -1376,11 +1323,11 @@ OSStatus CThirdPage::OnInitPage()
 	// selection notice
 	//
 	header.LoadString(IDS_MANUFACTURER_HEADING);
-	m_manufacturerListCtrl.InsertColumn(0, header, LVCFMT_LEFT, -1 );
+	m_manufacturerListCtrl.InsertColumn(0, header, LVCFMT_LEFT, 138);
 	m_manufacturerSelected = NULL;
 
 	header.LoadString(IDS_MODEL_HEADING);
-	m_modelListCtrl.InsertColumn(0, header, LVCFMT_LEFT, -1 );
+	m_modelListCtrl.InsertColumn(0, header, LVCFMT_LEFT, 247);
 	m_modelSelected = NULL;
 
 	return (err);
@@ -1416,7 +1363,15 @@ CThirdPage::OnSetActive()
 	psheet = reinterpret_cast<CPrinterSetupWizardSheet*>(GetParent());
 	require_quiet( psheet, exit );
    
-	psheet->SetWizardButtons( PSWIZB_BACK );
+	if ((m_manufacturerListCtrl.GetFirstSelectedItemPosition() != NULL) &&
+	    (m_modelListCtrl.GetFirstSelectedItemPosition() != NULL))
+	{
+		psheet->SetWizardButtons( PSWIZB_BACK|PSWIZB_NEXT );
+	}
+	else
+	{
+		psheet->SetWizardButtons( PSWIZB_BACK );
+	}
 
 	printer = psheet->GetSelectedPrinter();
 	require_quiet( printer, exit );
@@ -1447,35 +1402,11 @@ CThirdPage::OnSetActive()
 	//
 	// and try and match the printer
 	//
-
-	if ( psheet->GetLastPage() == psheet->GetPage(1) )
-	{
-		MatchPrinter( m_manufacturers, printer, service, true );
-	}
-	else
-	{
-		SelectMatch(printer, service, m_manufacturerSelected, m_modelSelected);
-	}
+	MatchPrinter( m_manufacturers, printer, service );
 
 exit:
 
 	return CPropertyPage::OnSetActive();
-}
-
-
-BOOL
-CThirdPage::OnKillActive()
-{
-	CPrinterSetupWizardSheet * psheet;
-
-	psheet = reinterpret_cast<CPrinterSetupWizardSheet*>(GetParent());
-	require_quiet( psheet, exit );   
-   
-	psheet->SetLastPage(this);
-
-exit:
-
-	return CPropertyPage::OnKillActive();
 }
 
 
@@ -1500,8 +1431,6 @@ CThirdPage::PopulateUI(Manufacturers & manufacturers)
 		nIndex = m_manufacturerListCtrl.InsertItem(0, manufacturer->name);
 
 		m_manufacturerListCtrl.SetItemData(nIndex, (DWORD_PTR) manufacturer);
-
-		m_manufacturerListCtrl.SetColumnWidth( 0, LVSCW_AUTOSIZE_USEHEADER );
 	}
 
 	return 0;
@@ -1542,8 +1471,6 @@ void CThirdPage::OnLvnItemchangedManufacturer(NMHDR *pNMHDR, LRESULT *pResult)
 			int nItem = m_modelListCtrl.InsertItem( 0, model->displayName );
 
 			m_modelListCtrl.SetItemData(nItem, (DWORD_PTR) model);
-
-			m_modelListCtrl.SetColumnWidth( 0, LVSCW_AUTOSIZE_USEHEADER );
 		}
 
 		m_modelListCtrl.SetRedraw(TRUE);
@@ -1604,7 +1531,7 @@ void CThirdPage::OnBnClickedDefaultPrinter()
 	printer = psheet->GetSelectedPrinter();
 	require_quiet( printer, exit );
 
-	printer->deflt = ( m_defaultPrinterCtrl.GetCheck() == BST_CHECKED ) ? true : false;
+	printer->deflt = m_defaultPrinterCtrl.GetState() ? true : false;
 
 exit:
 
@@ -1616,7 +1543,6 @@ void CThirdPage::OnBnClickedHaveDisk()
 	CPrinterSetupWizardSheet	*	psheet;
 	Printer						*	printer;
 	Service						*	service;
-	Manufacturers					manufacturers;
 
 	CFileDialog dlg(TRUE, NULL, NULL, OFN_HIDEREADONLY|OFN_FILEMUSTEXIST, L"Setup Information (*.inf)|*.inf||", this);
 
@@ -1629,29 +1555,16 @@ void CThirdPage::OnBnClickedHaveDisk()
 	service = printer->services.front();
 	require_quiet( service, exit );
 
-	for ( ;; )
+	if ( dlg.DoModal() == IDOK )
 	{
-		if ( dlg.DoModal() == IDOK )
-		{
-			CString filename = dlg.GetPathName();
+		Manufacturers	manufacturers;
+		CString			filename = dlg.GetPathName();
 
-			LoadPrintDriverDefsFromFile( manufacturers, filename, true );
+		LoadPrintDriverDefsFromFile( manufacturers, filename, true );
    
-			// Sanity check
+		PopulateUI( manufacturers );
 
-			if ( manufacturers.size() > 0 )
-			{
-				PopulateUI( manufacturers );
-
-				MatchPrinter( manufacturers, printer, service, false );
-
-				break;
-			}
-		}
-		else
-		{
-			break;
-		}
+		MatchPrinter( manufacturers, printer, service );
 	}
 
 exit:

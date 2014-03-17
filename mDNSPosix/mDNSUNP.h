@@ -2,27 +2,28 @@
  *
  * Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
 
 $Log: mDNSUNP.h,v $
-Revision 1.19  2006/08/14 23:24:47  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.18  2005/04/08 21:37:57  ksekar
-<rdar://problem/3792767> get_ifi_info doesn't return IPv6 interfaces on Linux
-
 Revision 1.17  2004/12/17 19:32:43  cheshire
 Add missing semicolon
 
@@ -89,10 +90,6 @@ First checkin
 #include <net/if.h>
 #include <netinet/in.h>
 
-#ifdef HAVE_LINUX
-#include <linux/socket.h>
-#endif
-
 #ifdef  __cplusplus
     extern "C" {
 #endif
@@ -102,12 +99,8 @@ First checkin
 #endif
 
 #if !defined(_SS_MAXSIZE)
-#if HAVE_IPV6
-#define sockaddr_storage sockaddr_in6
-#else
-#define sockaddr_storage sockaddr
-#endif // HAVE_IPV6	
-#endif // !defined(_SS_MAXSIZE)
+    #define sockaddr_storage sockaddr
+#endif
 
 #ifndef NOT_HAVE_SA_LEN
 #define GET_SA_LEN(X) (sizeof(struct sockaddr) > ((struct sockaddr*)&(X))->sa_len ? \
@@ -153,17 +146,6 @@ struct ifi_info {
   struct ifi_info  *ifi_next;   /* next of these structures */
 };
 
-#if defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
-#define PROC_IFINET6_PATH "/proc/net/if_inet6"
-extern struct ifi_info  *get_ifi_info_linuxv6(int family, int doaliases);
-#endif
-	
-#if defined(AF_INET6) && HAVE_IPV6
-#define INET6_ADDRSTRLEN 46 /*Maximum length of IPv6 address */
-#endif
-	
-
-	
 #define IFI_ALIAS   1           /* ifi_addr is an alias */
 
 /* From the text (Stevens, section 16.6): */

@@ -1,52 +1,28 @@
-/* -*- Mode: C; tab-width: 4 -*-
- *
+/*
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
     
 $Log: Service.c,v $
-Revision 1.39  2006/08/14 23:26:07  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.38  2005/10/05 20:55:15  herscher
-<rdar://problem/4096464> Don't call SetLLRoute on loopback interface
-
-Revision 1.37  2005/10/05 18:05:28  herscher
-<rdar://problem/4192011> Save Wide-Area preferences in a different spot in the registry so they don't get removed when doing an update install.
-
-Revision 1.36  2005/09/11 22:12:42  herscher
-<rdar://problem/4247793> Remove dependency on WMI.  Ensure that the Windows firewall is turned on before trying to configure it.
-
-Revision 1.35  2005/06/30 18:29:49  shersche
-<rdar://problem/4090059> Don't overwrite the localized service description text
-
-Revision 1.34  2005/04/22 07:34:23  shersche
-Check an interface's address and make sure it's valid before using it to set link-local routes.
-
-Revision 1.33  2005/04/13 17:48:23  shersche
-<rdar://problem/4079667> Make sure there is only one default route for link-local addresses.
-
-Revision 1.32  2005/04/06 01:32:05  shersche
-Remove default route for link-local addressing when another interface comes up with a routable IPv4 address
-
-Revision 1.31  2005/04/06 01:00:11  shersche
-<rdar://problem/4080127> GetFullPathName() should be passed the number of TCHARs in the path buffer, not the size in bytes of the path buffer.
-
-Revision 1.30  2005/04/06 00:52:43  shersche
-<rdar://problem/4079667> Only add default route if there are no other routable IPv4 addresses on any of the other interfaces. More work needs to be done to correctly configure the routing table when multiple interfaces are extant and none of them have routable IPv4 addresses.
-
 Revision 1.29  2005/03/06 05:21:56  shersche
 <rdar://problem/4037635> Fix corrupt UTF-8 name when non-ASCII system name used, enabled unicode support
 
@@ -193,9 +169,8 @@ mDNSResponder Windows Service. Provides global Bonjour support with an IPC inter
 
 #define	DEBUG_NAME							"[Server] "
 #define kServiceFirewallName				L"Bonjour"
-#define	kServiceDependencies				TEXT("Tcpip\0\0")
+#define	kServiceDependencies				TEXT("Tcpip\0winmgmt\0\0")
 #define	kDNSServiceCacheEntryCountDefault	512
-#define kRetryFirewallPeriod				30 * 1000
 
 #define RR_CACHE_SIZE 500
 static CacheEntity gRRCache[RR_CACHE_SIZE];
@@ -282,9 +257,8 @@ static mDNSs32		udsIdle(mDNS * const inMDNS, mDNSs32 interval);
 static void			CoreCallback(mDNS * const inMDNS, mStatus result);
 static void			HostDescriptionChanged(mDNS * const inMDNS);
 static OSStatus		GetRouteDestination(DWORD * ifIndex, DWORD * address);
-static OSStatus		SetLLRoute( mDNS * const inMDNS );
-static bool			HaveRoute( PMIB_IPFORWARDROW rowExtant, unsigned long addr );
-static bool			IsValidAddress( const char * addr );
+static bool			HaveLLRoute(PMIB_IPFORWARDROW rowExtant);
+static OSStatus		SetLLRoute();
 
 #if defined(UNICODE)
 #	define StrLen(X)	wcslen(X)
@@ -327,7 +301,6 @@ DEBUG_LOCAL HANDLE					*	gWaitList				= NULL;
 DEBUG_LOCAL HANDLE						gStopEvent				= NULL;
 DEBUG_LOCAL CRITICAL_SECTION			gEventSourceLock;
 DEBUG_LOCAL GenLinkedList				gEventSources;
-DEBUG_LOCAL BOOL						gRetryFirewall			= FALSE;
 
 
 #if 0
@@ -505,7 +478,7 @@ static OSStatus	InstallService( LPCTSTR inName, LPCTSTR inDisplayName, LPCTSTR i
 	
 	// Get a full path to the executable since a relative path may have been specified.
 	
-	size = GetFullPathName( inPath, MAX_PATH, fullPath, &namePtr );
+	size = GetFullPathName( inPath, sizeof( fullPath ), fullPath, &namePtr );
 	err = translate_errno( size > 0, (OSStatus) GetLastError(), kPathErr );
 	require_noerr( err, exit );
 	
@@ -616,6 +589,7 @@ static OSStatus SetServiceParameters()
 	DWORD 			value;
 	DWORD			valueLen = sizeof(DWORD);
 	DWORD			type;
+	LPCTSTR			s;
 	OSStatus		err;
 	HKEY			key;
 
@@ -624,7 +598,8 @@ static OSStatus SetServiceParameters()
 	//
 	// Add/Open Parameters section under service entry in registry
 	//
-	err = RegCreateKey( HKEY_LOCAL_MACHINE, kServiceParametersNode, &key );
+	s = TEXT("SYSTEM\\CurrentControlSet\\Services\\") kServiceName TEXT("\\Parameters");
+	err = RegCreateKey( HKEY_LOCAL_MACHINE, s, &key );
 	require_noerr( err, exit );
 	
 	//
@@ -661,6 +636,7 @@ static OSStatus GetServiceParameters()
 	DWORD 			value;
 	DWORD			valueLen;
 	DWORD			type;
+	LPCTSTR			s;
 	OSStatus		err;
 	HKEY			key;
 
@@ -669,7 +645,8 @@ static OSStatus GetServiceParameters()
 	//
 	// Add/Open Parameters section under service entry in registry
 	//
-	err = RegCreateKey( HKEY_LOCAL_MACHINE, kServiceParametersNode, &key );
+	s = TEXT("SYSTEM\\CurrentControlSet\\Services\\") kServiceName TEXT("\\Parameters");
+	err = RegCreateKey( HKEY_LOCAL_MACHINE, s, &key );
 	require_noerr( err, exit );
 	
 	valueLen = sizeof(DWORD);
@@ -703,80 +680,21 @@ exit:
 
 static OSStatus CheckFirewall()
 {
-	DWORD 					value;
-	DWORD					valueLen;
-	DWORD					type;
-	ENUM_SERVICE_STATUS	*	lpService = NULL;
-	SC_HANDLE				sc = NULL;
-	HKEY					key = NULL;
-	BOOL					ok;
-	DWORD					bytesNeeded = 0;
-	DWORD					srvCount;
-	DWORD					resumeHandle = 0;
-	DWORD					srvType;
-	DWORD					srvState;
-	DWORD					dwBytes = 0;
-	DWORD					i;
-	BOOL					isRunning = FALSE;
-	OSStatus				err = kUnknownErr;
+	DWORD 			value;
+	DWORD			valueLen;
+	DWORD			type;
+	LPCTSTR			s;
+	HKEY			key = NULL;
+	OSStatus		err = kUnknownErr;
 	
-	// Check to see if the firewall service is running.  If it isn't, then
-	// we want to return immediately
-
-	sc = OpenSCManager( NULL, NULL, SC_MANAGER_ENUMERATE_SERVICE );
-	err = translate_errno( sc, GetLastError(), kUnknownErr );
-	require_noerr( err, exit );
-
-	srvType		=	SERVICE_WIN32;
-	srvState	=	SERVICE_STATE_ALL;
-
-	for ( ;; )
-	{
-		// Call EnumServicesStatus using the handle returned by OpenSCManager
-
-		ok = EnumServicesStatus ( sc, srvType, srvState, lpService, dwBytes, &bytesNeeded, &srvCount, &resumeHandle );
-
-		if ( ok || ( GetLastError() != ERROR_MORE_DATA ) )
-		{
-			break;
-		}
-
-		if ( lpService )
-		{
-			free( lpService );
-		}
-
-		dwBytes = bytesNeeded;
-
-		lpService = ( ENUM_SERVICE_STATUS* ) malloc( dwBytes );
-		require_action( lpService, exit, err = mStatus_NoMemoryErr );
-	}
-
-	err = translate_errno( ok, GetLastError(), kUnknownErr );
-	require_noerr( err, exit );
-
-	for ( i = 0; i < srvCount; i++ )
-	{
-		if ( wcscmp( lpService[i].lpServiceName, L"SharedAccess" ) == 0 )
-		{
-			if ( lpService[i].ServiceStatus.dwCurrentState == SERVICE_RUNNING )
-			{
-				isRunning = TRUE;
-			}
-
-			break;
-		}
-	}
-
-	require_action( isRunning, exit, err = kUnknownErr );
-
 	// Check to see if we've managed the firewall.
 	// This package might have been installed, then
 	// the OS was upgraded to SP2 or above.  If that's
 	// the case, then we need to manipulate the firewall
 	// so networking works correctly.
 
-	err = RegCreateKey( HKEY_LOCAL_MACHINE, kServiceParametersNode, &key );
+	s = TEXT("SYSTEM\\CurrentControlSet\\Services\\") kServiceName TEXT("\\Parameters");
+	err = RegCreateKey( HKEY_LOCAL_MACHINE, s, &key );
 	require_noerr( err, exit );
 
 	valueLen = sizeof(DWORD);
@@ -806,16 +724,6 @@ exit:
 	if ( key )
 	{
 		RegCloseKey( key );
-	}
-	
-	if ( lpService )
-	{
-		free( lpService );
-	}
-
-	if ( sc )
-	{
-		CloseServiceHandle ( sc );
 	}
 
 	return( err );
@@ -981,6 +889,7 @@ static void WINAPI ServiceMain( DWORD argc, LPTSTR argv[] )
 {
 	OSStatus		err;
 	BOOL			ok;
+	TCHAR			desc[ 256 ];
 	
 	err = ServiceSetupEventLogging();
 	check_noerr( err );
@@ -1001,6 +910,13 @@ static void WINAPI ServiceMain( DWORD argc, LPTSTR argv[] )
 	gServiceStatusHandle = RegisterServiceCtrlHandlerEx( argv[ 0 ], ServiceControlHandler, NULL );
 	err = translate_errno( gServiceStatusHandle, (OSStatus) GetLastError(), kInUseErr );
 	require_noerr( err, exit );
+	
+	// Setup the description. This should be done by the installer, but it doesn't support that yet.
+			
+	desc[ 0 ] = '\0';
+	LoadString( GetModuleHandle( NULL ), IDS_SERVICE_DESCRIPTION, desc, sizeof( desc ) );
+	err = SetServiceInfo( NULL, kServiceName, desc );
+	check_noerr( err );
 	
 	// Mark the service as starting.
 
@@ -1167,11 +1083,6 @@ static OSStatus	ServiceRun( int argc, LPTSTR argv[] )
 	
 	err = CheckFirewall();
 	check_noerr( err );
-
-	if ( err )
-	{
-		gRetryFirewall = TRUE;
-	}
 	
 	// Run the service-specific stuff. This does not return until the service quits or is stopped.
 	
@@ -1247,14 +1158,11 @@ static OSStatus	ServiceSpecificInitialize( int argc, LPTSTR argv[] )
 	require_noerr( err, exit);
 
 	//
-	// <rdar://problem/4096464> Don't call SetLLRoute on loopback
-	// 
-	// Otherwise, set a route to link local addresses (169.254.0.0)
+	// set a route to link local addresses (169.254.0.0)
 	//
-
-	if ( gServiceManageLLRouting && !gPlatformStorage.registeredLoopback4 )
+	if (gServiceManageLLRouting == true)
 	{
-		SetLLRoute( &gMDNSRecord );
+		SetLLRoute();
 	}
 
 exit:
@@ -1271,32 +1179,16 @@ exit:
 
 static OSStatus	ServiceSpecificRun( int argc, LPTSTR argv[] )
 {
-	DWORD	timeout;
 	DWORD result;
 	
 	DEBUG_UNUSED( argc );
 	DEBUG_UNUSED( argv );
 
 	// Main event loop. Process connection requests and state changes (i.e. quit).
-
-	timeout = ( gRetryFirewall ) ? kRetryFirewallPeriod : INFINITE;
-
-	while( (result = WaitForSingleObject( gStopEvent, timeout ) ) != WAIT_OBJECT_0 )
+	while( (result = WaitForSingleObject(gStopEvent, INFINITE)) != WAIT_OBJECT_0 )
 	{
-		if ( result == WAIT_TIMEOUT )
-		{
-			OSStatus err;
-
-			err = CheckFirewall();
-			check_noerr( err );
-
-			timeout = INFINITE;
-		}
-		else
-		{
-			// Unexpected wait result.
-			dlog( kDebugLevelWarning, DEBUG_NAME "%s: unexpected wait result (result=0x%08X)\n", __ROUTINE__, result );
-		}
+		// Unexpected wait result.
+		dlog( kDebugLevelWarning, DEBUG_NAME "%s: unexpected wait result (result=0x%08X)\n", __ROUTINE__, result );
 	}
 
 	return kNoErr;
@@ -1354,17 +1246,13 @@ static void	ServiceSpecificFinalize( int argc, LPTSTR argv[] )
 static void
 CoreCallback(mDNS * const inMDNS, mStatus status)
 {
+	DEBUG_UNUSED( inMDNS );
+
 	if (status == mStatus_ConfigChanged)
 	{
-		//
-		// <rdar://problem/4096464> Don't call SetLLRoute on loopback
-		// 
-		// Otherwise, set a route to link local addresses (169.254.0.0)
-		//
-
-		if ( gServiceManageLLRouting && !inMDNS->p->registeredLoopback4 )
+		if (gServiceManageLLRouting == true)
 		{
-			SetLLRoute( inMDNS );
+			SetLLRoute();
 		}
 	}
 }
@@ -1770,11 +1658,11 @@ EventSourceUnlock()
 
 
 //===========================================================================================================================
-//	HaveRoute
+//	HaveLLRoute
 //===========================================================================================================================
 
 static bool
-HaveRoute( PMIB_IPFORWARDROW rowExtant, unsigned long addr )
+HaveLLRoute(PMIB_IPFORWARDROW rowExtant)
 {
 	PMIB_IPFORWARDTABLE	pIpForwardTable	= NULL;
 	DWORD				dwSize			= 0;
@@ -1806,7 +1694,7 @@ HaveRoute( PMIB_IPFORWARDROW rowExtant, unsigned long addr )
 	//
 	for ( i = 0; i < pIpForwardTable->dwNumEntries; i++)
 	{
-		if ( pIpForwardTable->table[i].dwForwardDest == addr )
+		if (pIpForwardTable->table[i].dwForwardDest == inet_addr(kLLNetworkAddr))
 		{
 			memcpy( rowExtant, &(pIpForwardTable->table[i]), sizeof(*rowExtant) );
 			found = true;
@@ -1826,22 +1714,11 @@ exit:
 
 
 //===========================================================================================================================
-//	IsValidAddress
-//===========================================================================================================================
-
-static bool
-IsValidAddress( const char * addr )
-{
-	return ( addr && ( strcmp( addr, "0.0.0.0" ) != 0 ) ) ? true : false;
-}	
-
-
-//===========================================================================================================================
 //	SetLLRoute
 //===========================================================================================================================
 
 static OSStatus
-SetLLRoute( mDNS * const inMDNS )
+SetLLRoute()
 {
 	DWORD				ifIndex;
 	MIB_IPFORWARDROW	rowExtant;
@@ -1871,7 +1748,7 @@ SetLLRoute( mDNS * const inMDNS )
 	//
 	// check to make sure we don't already have a route
 	//
-	if ( HaveRoute( &rowExtant, inet_addr( kLLNetworkAddr ) ) )
+	if (HaveLLRoute(&rowExtant))
 	{
 		//
 		// set the age to 0 so that we can do a memcmp.
@@ -1905,32 +1782,13 @@ SetLLRoute( mDNS * const inMDNS )
 	}
 
 	//
-	// Now we want to see if we should install a default route for this interface.
-	// We want to do this if the following are true:
+	// see if this address is a link local address
 	//
-	// 1. This interface has a link-local address
-	// 2. This is the only IPv4 interface
-	//
-
-	if ( ( row.dwForwardNextHop & 0xFFFF ) == row.dwForwardDest )
+	if ((row.dwForwardNextHop & 0xFFFF) == row.dwForwardDest)
 	{
-		mDNSInterfaceData	*	ifd;
-		int						numLinkLocalInterfaces	= 0;
-		int						numInterfaces			= 0;
-	
-		for ( ifd = inMDNS->p->interfaceList; ifd; ifd = ifd->next )
-		{
-			if ( ifd->defaultAddr.type == mDNSAddrType_IPv4 )
-			{
-				numInterfaces++;
-
-				if ( ( ifd->interfaceInfo.ip.ip.v4.b[0] == 169 ) && ( ifd->interfaceInfo.ip.ip.v4.b[1] == 254 ) )
-				{
-					numLinkLocalInterfaces++;
-				}
-			}
-		}
-
+		//
+		// if so, set up a route to ARP everything
+		//
 		row.dwForwardDest		= 0;
 		row.dwForwardIfIndex	= ifIndex;
 		row.dwForwardMask		= 0;
@@ -1938,26 +1796,16 @@ SetLLRoute( mDNS * const inMDNS )
 		row.dwForwardProto		= MIB_IPPROTO_NETMGMT;
 		row.dwForwardAge		= 0;
 		row.dwForwardPolicy		= 0;
-		row.dwForwardMetric1	= 20;
+		row.dwForwardMetric1	= 1;
 		row.dwForwardMetric2	= (DWORD) - 1;
 		row.dwForwardMetric3	= (DWORD) - 1;
 		row.dwForwardMetric4	= (DWORD) - 1;
 		row.dwForwardMetric5	= (DWORD) - 1;
-		
-		if ( numInterfaces == numLinkLocalInterfaces )
-		{
-			if ( !HaveRoute( &row, 0 ) )
-			{
-				err = CreateIpForwardEntry(&row);
-				require_noerr( err, exit );
-			}
-		}
-		else
-		{
-			DeleteIpForwardEntry( &row );
-		}
-	}
 
+		err = CreateIpForwardEntry(&row);
+
+		require_noerr( err, exit );
+	}
 exit:
 
 	return ( err );
@@ -1975,7 +1823,6 @@ GetRouteDestination(DWORD * ifIndex, DWORD * address)
 	IP_ADAPTER_INFO	*	pAdapterInfo	=	NULL;
 	IP_ADAPTER_INFO	*	pAdapter		=	NULL;
 	ULONG				bufLen;
-	mDNSBool			done			=	mDNSfalse;
 	OSStatus			err;
 
 	//
@@ -2035,41 +1882,24 @@ GetRouteDestination(DWORD * ifIndex, DWORD * address)
 		pAdapter = pAdapter->Next;
 	}
 
-	while ( !done )
+	pAdapter	=	pAdapterInfo;
+	err			=	kUnknownErr;
+
+	while (pAdapter)
 	{
-		pAdapter	=	pAdapterInfo;
-		err			=	kUnknownErr;
-
-		while (pAdapter)
+		//
+		// if we don't have an interface selected, choose the first one
+		//
+		if ((pAdapter->Type == MIB_IF_TYPE_ETHERNET) && (!(*ifIndex) || (pAdapter->Index == (*ifIndex))))
 		{
-			// If we don't have an interface selected, choose the first one that is of type ethernet and
-			// has a valid IP Address
-
-			if ((pAdapter->Type == MIB_IF_TYPE_ETHERNET) && ( IsValidAddress( pAdapter->IpAddressList.IpAddress.String ) ) && (!(*ifIndex) || (pAdapter->Index == (*ifIndex))))
-			{
-				*address =	inet_addr( pAdapter->IpAddressList.IpAddress.String );
-				*ifIndex =  pAdapter->Index;
-				err		 =	kNoErr;
-				break;
-			}
-		
-			pAdapter = pAdapter->Next;
+			*address =	inet_addr( pAdapter->IpAddressList.IpAddress.String );
+			*ifIndex =  pAdapter->Index;
+			err		 =	kNoErr;
+			break;
 		}
-
-		// If we found the right interface, or we weren't trying to find a specific interface then we're done
-
-		if ( !err || !( *ifIndex) )
-		{
-			done = mDNStrue;
-		}
-
-		// Otherwise, try again by wildcarding the interface
-
-		else
-		{
-			*ifIndex = 0;
-		}
-	} 
+	
+		pAdapter = pAdapter->Next;
+	}
 
 exit:
 
@@ -2080,3 +1910,4 @@ exit:
 
 	return( err );
 }
+

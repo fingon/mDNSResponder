@@ -2,17 +2,24 @@
  *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * @APPLE_LICENSE_HEADER_START@
  * 
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
 
 	File:		daemon.c
 
@@ -21,15 +28,6 @@
 	Change History (most recent first):
 
 $Log: PosixDaemon.c,v $
-Revision 1.29.2.1  2006/08/29 06:24:34  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.29  2005/08/04 03:37:45  mkrochma
-Temporary workaround to fix posix after mDNS_SetPrimaryInterfaceInfo changed
-
-Revision 1.28  2005/07/19 11:21:09  cheshire
-<rdar://problem/4170449> Unix Domain Socket leak in mdnsd
-
 Revision 1.27  2005/02/04 00:39:59  cheshire
 Move ParseDNSServers() from PosixDaemon.c to mDNSPosix.c so all Posix client layers can use it
 
@@ -145,14 +143,14 @@ extern const char mDNSResponderVersionString[];
 static void Reconfigure(mDNS *m)
 	{
 	mDNSAddr DynDNSIP;
-	mDNS_SetPrimaryInterfaceInfo(m, NULL, NULL, NULL);
+	mDNS_SetPrimaryInterfaceInfo(m, NULL, NULL);
 	mDNS_DeleteDNSServers(m);
 	if (ParseDNSServers(m, uDNS_SERVERS_FILE) < 0)
 		LogMsg("Unable to parse DNS server list. Unicast DNS-SD unavailable");
 	ReadDDNSSettingsFromConfFile(m, CONFIG_FILE, &DynDNSHostname, &DynDNSZone, NULL);
 	FindDefaultRouteIP(&DynDNSIP);
 	if (DynDNSHostname.c[0]) mDNS_AddDynDNSHostName(m, &DynDNSHostname, NULL, NULL);
-	if (DynDNSIP.type)       mDNS_SetPrimaryInterfaceInfo(m, &DynDNSIP, NULL, NULL);
+	if (DynDNSIP.type)       mDNS_SetPrimaryInterfaceInfo(m, &DynDNSIP, NULL);
 	}
 
 // Do appropriate things at startup with command line arguments. Calls exit() if unhappy.
@@ -290,9 +288,8 @@ mStatus udsSupportAddFDToEventLoop(int fd, udsEventCallback callback, void *cont
 
 mStatus udsSupportRemoveFDFromEventLoop(int fd)		// Note: This also CLOSES the file descriptor
 	{
-	mStatus err = mDNSPosixRemoveFDFromEventLoop(fd);
+	return mDNSPosixRemoveFDFromEventLoop(fd);
 	close(fd);
-	return err;
 	}
 
 mDNSexport void RecordUpdatedNiceLabel(mDNS *const m, mDNSs32 delay)

@@ -2,27 +2,28 @@
  *
  * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * @APPLE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
  * limitations under the License.
+ *
+ * @APPLE_LICENSE_HEADER_END@
 
     Change History (most recent first):
 
 $Log: LegacyNATTraversal.c,v $
-Revision 1.12.2.1  2006/08/29 06:24:30  cheshire
-Re-licensed mDNSResponder daemon source code under Apache License, Version 2.0
-
-Revision 1.12  2005/07/22 21:36:16  ksekar
-Fix GCC 4.0/Intel compiler warnings
-
 Revision 1.11  2004/12/03 03:34:20  ksekar
 <rdar://problem/3882674> LegacyNATTraversal.c leaks threads
 
@@ -1311,20 +1312,20 @@ static void *TCPProc(void *in)
 			(g_dwLocalIP >> 0) & 0xFF,
 			g_wEventPort);
 
-		n = sprintf((char *)buf,
+		n = sprintf(buf,
 			szEventMsgSubscribeFMT,
 			g_szEventURL,
 			callback, g_szRouterHostPortEvent, 1800);
 
 		memset(response, 0, 2000);
 		n = SendTCPMsg_saddr_parse(
-			(char *)buf, n,
+			buf, n,
 			response, 2000,
 			&g_saddrRouterEvent);
 		if (n > 0)
 		{
 			response[n] = '\0';
-			resp = NewHTTPResponse_sz((char *)buf, n, TRUE);
+			resp = NewHTTPResponse_sz(buf, n, TRUE);
 			if (NULL != resp)
 			{
 ////TracePrint(ELL_TRACE, "UPnP Subscribe returns %s/%d\n", resp->pszStatus, n);
@@ -1351,7 +1352,7 @@ static void *TCPProc(void *in)
 	{
 //		ssize_t				n;
 		struct sockaddr_in	recvaddr;
-		socklen_t		    recvaddrlen;
+		int					recvaddrlen;
 		fd_set				readfds;
 		struct timeval		timeout;
 		int					sEvent;
@@ -1472,7 +1473,7 @@ static void *UDPProc(void *in)
 	for (;;) {
 		ssize_t				n;
 		struct sockaddr_in	recvaddr;
-		socklen_t					recvaddrlen;
+		int					recvaddrlen;
 		fd_set				readfds;
 		//struct timeval		timeout;
 		//int					i;
@@ -1512,8 +1513,8 @@ static void *UDPProc(void *in)
 			return NULL;
 		}
 		buf[n] = '\0';
-		if (strncmp((char *)buf, "HTTP/1.1", 8) == 0) {
-			PHTTPResponse pResponse = NewHTTPResponse_sz((char *)buf, n, TRUE);
+		if (strncmp(buf, "HTTP/1.1", 8) == 0) {
+			PHTTPResponse pResponse = NewHTTPResponse_sz(buf, n, TRUE);
 			PrintHTTPResponse(pResponse);
 			if (DiscoverRouter(pResponse) == 0)
 			{
@@ -1528,11 +1529,11 @@ static void *UDPProc(void *in)
 			}
 			DeleteHTTPResponse(pResponse);
 		}
-		else if (strncmp((char *)buf, "NOTIFY * HTTP/1.1", 7) == 0) {
+		else if (strncmp(buf, "NOTIFY * HTTP/1.1", 7) == 0) {
 			// temporarily use this to fudge - will have the exact same
 			// parsing, only status/reason set to "*" and "HTTP/1.1".
 			// TODO: add support for HTTP requests
-			PHTTPResponse pResponse = NewHTTPResponse_sz((char *)buf, n, TRUE);
+			PHTTPResponse pResponse = NewHTTPResponse_sz(buf, n, TRUE);
 			if (DiscoverRouter(pResponse) == 0)
 			{
 				time_t	now = time(NULL);
@@ -2809,7 +2810,7 @@ static int GetMappingUnused(unsigned short eport, int protocol)
 	char			szPort[10];
 	Property		propArgs[3];
 	PHTTPResponse	resp;
-	unsigned long	ip = 0;
+	unsigned long	ip;
 
 	sprintf( szPort, "%u", eport);
 
