@@ -35,6 +35,11 @@
 #pragma mark - DynDNS structures
 #endif
 
+#if WIN32
+// named type definition in parentheses 
+#	pragma warning( disable: 4115 ) 
+#endif
+
 typedef struct IPAddrListElem
 	{
 	mDNSAddr addr;
@@ -61,7 +66,7 @@ extern mStatus dDNS_SetupAddr( mDNSAddr *ip, const struct sockaddr * const sa );
 
 // This section defines the interface to the DynDNS Platform Support layer.
 
-extern void					dDNSPlatformGetConfig(domainname *const fqdn, domainname *const regDomain, domainname *const browseDomain);
+extern void					dDNSPlatformGetConfig(domainname *const fqdn, domainname *const regDomain, DNameListElem ** browseDomains);
 extern void					dDNSPlatformSetNameStatus(domainname *const dname, mStatus status);
 extern void					dDNSPlatformSetSecretForDomain( mDNS *m, const domainname *domain );
 extern DNameListElem	*	dDNSPlatformGetSearchDomainList( void );

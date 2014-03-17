@@ -23,6 +23,24 @@
     Change History (most recent first):
     
 $Log: ExplorerBarWindow.cpp,v $
+Revision 1.21  2005/04/06 01:13:07  shersche
+<rdar://problem/4066195> Use the product icon instead of globe icon for 'About' link.
+
+Revision 1.20  2005/03/18 02:43:02  shersche
+<rdar://problem/4046443> Use standard IE website icon for 'About Bonjour', only using globe icon if standard icon cannot be loaded
+
+Revision 1.19  2005/03/16 03:46:27  shersche
+<rdar://problem/4045657> Use Bonjour icon for all discovered sites
+
+Revision 1.18  2005/02/26 01:24:05  shersche
+Remove display lines in tree control
+
+Revision 1.17  2005/02/25 19:57:30  shersche
+<rdar://problem/4023323> Remove FTP browsing from plugin
+
+Revision 1.16  2005/02/08 23:31:06  shersche
+Move "About ..." item underneath WebSites, change icons for discovered sites and "About ..." item
+
 Revision 1.15  2005/01/27 22:38:27  shersche
 add About item to tree list
 
@@ -134,6 +152,10 @@ static char THIS_FILE[] = __FILE__;
 
 #define	kTXTRecordKeyPath				"path"
 
+// IE Icon resource
+
+#define kIEIconResource					32529
+
 
 #if 0
 #pragma mark == Prototypes ==
@@ -196,6 +218,7 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 {
 	AFX_MANAGE_STATE( AfxGetStaticModuleState() );
 	
+	HINSTANCE		module = NULL;
 	OSStatus		err;
 	CRect			rect;
 	CBitmap			bitmap;
@@ -205,12 +228,9 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 	require_noerr( err, exit );
 	
 	GetClientRect( rect );
-	mTree.Create( WS_TABSTOP | WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_HASLINES | TVS_NOHSCROLL , rect, this, 
+	mTree.Create( WS_TABSTOP | WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_NOHSCROLL , rect, this, 
 		IDC_EXPLORER_TREE );
 	
-	s.LoadString( IDS_ABOUT );
-	m_about = mTree.InsertItem( s, 0, 0 );
-
 	ServiceHandlerEntry *		e;
 	
 	// Web Site Handler
@@ -220,59 +240,36 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 	e->type				= "_http._tcp";
 	e->urlScheme		= "http://";
 	e->ref				= NULL;
-	e->treeItem			= NULL;
-	e->treeFirst		= true;
 	e->obj				= this;
 	e->needsLogin		= false;
 	mServiceHandlers.Add( e );
-	
-	s.LoadString( IDS_WEB_SITES );
-	e->treeItem = mTree.InsertItem( s, 1, 1 );
-	mTree.Expand( e->treeItem, TVE_EXPAND );
-	
+
+	s.LoadString( IDS_ABOUT );
+	m_about = mTree.InsertItem( s, 0, 0 );
+
 	err = DNSServiceBrowse( &e->ref, 0, 0, e->type, NULL, BrowseCallBack, e );
 	require_noerr( err, exit );
 
 	err = WSAAsyncSelect((SOCKET) DNSServiceRefSockFD(e->ref), m_hWnd, WM_PRIVATE_SERVICE_EVENT, FD_READ|FD_CLOSE);
 	require_noerr( err, exit );
 
-	m_serviceRefs.push_back(e->ref); 
+	m_serviceRefs.push_back(e->ref);
 
-	// FTP Site Handler
-	
-	e = new ServiceHandlerEntry;
-	check( e );
-	e->type				= "_ftp._tcp";
-	e->urlScheme		= "ftp://";
-	e->ref				= NULL;
-	e->treeItem			= NULL;
-	e->treeFirst		= true;
-	e->obj				= this;
-	e->needsLogin		= true;
-	mServiceHandlers.Add( e );
-	
-	s.LoadString( IDS_FTP_SITES );
-	e->treeItem = mTree.InsertItem( s, 1, 1 );
-	mTree.Expand( e->treeItem, TVE_EXPAND );
-	
-	err = DNSServiceBrowse( &e->ref, 0, 0, e->type, NULL, BrowseCallBack, e );
-	require_noerr( err, exit );
+	m_imageList.Create( 16, 16, ILC_MASK | ILC_COLOR16, 2, 0);
 
-	err = WSAAsyncSelect((SOCKET) DNSServiceRefSockFD(e->ref), m_hWnd, WM_PRIVATE_SERVICE_EVENT, FD_READ|FD_CLOSE);
-	require_noerr( err, exit );
-
-	m_serviceRefs.push_back(e->ref); 
-
-	m_imageList.Create( 16, 16, ILC_COLORDDB, 2, 0);
-	bitmap.Attach( ::LoadBitmap( GetNonLocalizedResources(), MAKEINTRESOURCE( IDB_GLOBE ) ) );
-	m_imageList.Add( &bitmap, (CBitmap*) NULL );
-	bitmap.Detach();
 	bitmap.Attach( ::LoadBitmap( GetNonLocalizedResources(), MAKEINTRESOURCE( IDB_LOGO ) ) );
 	m_imageList.Add( &bitmap, (CBitmap*) NULL );
+	bitmap.Detach();
 
 	mTree.SetImageList(&m_imageList, TVSIL_NORMAL);
 	
 exit:
+
+	if ( module )
+	{
+		FreeLibrary( module );
+		module = NULL;
+	}
 
 	// Cannot talk to the mDNSResponder service. Show the error message and exit (with kNoErr so they can see it).
 	if ( err )
@@ -551,18 +548,10 @@ LONG	ExplorerBarWindow::OnServiceAdd( ServiceInfo * service )
 		
 		// Insert the new item in sorted order.
 		
-		afterItem = ( index > 0 ) ? handler->array[ index - 1 ]->item : TVI_FIRST;
+		afterItem = ( index > 0 ) ? handler->array[ index - 1 ]->item : m_about;
 		handler->array.InsertAt( index, service );
-		service->item = mTree.InsertItem( service->displayName, 1, 1, handler->treeItem, afterItem );
+		service->item = mTree.InsertItem( service->displayName, 0, 0, NULL, afterItem );
 		mTree.SetItemData( service->item, (DWORD_PTR) service );
-		
-		// Make sure the item is visible if this is the first time a service was added.
-	
-		if( handler->treeFirst )
-		{
-			handler->treeFirst = false;
-			mTree.EnsureVisible( service->item );
-		}
 	}
 	return( 0 );
 }
