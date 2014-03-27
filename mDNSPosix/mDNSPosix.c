@@ -703,6 +703,29 @@ mDNSlocal int SetupSocket(struct sockaddr *intfAddr, mDNSIPPort port, int interf
             if (err < 0) { err = errno; perror("setsockopt - IP_MULTICAST_TTL"); }
         }
 
+#ifdef __linux__
+#ifdef SO_BINDTODEVICE
+        if (err == 0 && interfaceIndex)
+        {
+            char ifname[IFNAMSIZ];
+            if (if_indextoname(interfaceIndex, ifname))
+              {
+                err = setsockopt(*sktPtr, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
+                if (err < 0)
+                  {
+                    err = errno;
+                    perror("setsockopt - SO_BINDTODEVICE");
+                  }
+              }
+            else
+              {
+                err = errno;
+                perror("if_indextoname");
+              }
+        }
+#endif /* SO_BINDTODEVICE */
+#endif /* __linux__ */
+
         // And start listening for packets
         if (err == 0)
         {
