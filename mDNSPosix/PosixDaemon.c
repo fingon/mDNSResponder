@@ -194,43 +194,9 @@ int main(int argc, char **argv)
      * SO_BINDTODEVICE is privileged operation; however, we can get
      * around it using capabilities instead of remaining root.
      */
-    struct __user_cap_header_struct ch;
-    int n = 0;
-    struct __user_cap_data_struct cd[2];
-
-    memset(&ch, 0, sizeof(ch));
-    memset(&cd[1], 0, sizeof(cd[1])); /* Clear above 32 bit capabilities */
-    capget(&ch, NULL);
-    switch (ch.version)
+    if (mStatus_NoError == err)
       {
-#ifdef _LINUX_CAPABILITY_VERSION_1
-      case _LINUX_CAPABILITY_VERSION_1:
-        n = _LINUX_CAPABILITY_U32S_1;
-        break;
-#endif /* _LINUX_CAPABILITY_VERSION_1 */
-#ifdef _LINUX_CAPABILITY_VERSION_2
-      case _LINUX_CAPABILITY_VERSION_2:
-        n = _LINUX_CAPABILITY_U32S_2;
-        break;
-#endif /* _LINUX_CAPABILITY_VERSION_2 */
-#ifdef _LINUX_CAPABILITY_VERSION_3
-      case _LINUX_CAPABILITY_VERSION_3:
-        n = _LINUX_CAPABILITY_U32S_3;
-        break;
-#endif /* _LINUX_CAPABILITY_VERSION_3 */
-      }
-    if (!n || n > 2)
-      LogMsg("WARNING: Unknown capability version");
-    else if (capget(&ch, &cd[0]) < 0)
-      perror("capget");
-    else
-      {
-        cd[0].permitted |= CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
-        cd[0].effective |= CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
-        cd[0].inheritable = 0;
-        if (capset(&ch, &cd[0]) < 0)
-          perror("capset");
-        else if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
+        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
           perror("prctl PR_SET_KEEPCAPS");
       }
 #endif /* __linux__ */
@@ -240,7 +206,25 @@ int main(int argc, char **argv)
     {
         const struct passwd *pw = getpwnam("nobody");
         if (pw != NULL)
+          {
             setuid(pw->pw_uid);
+#ifdef __linux__
+            struct __user_cap_header_struct ch;
+            struct __user_cap_data_struct cd[_LINUX_CAPABILITY_U32S_3];
+
+            memset(&ch, 0, sizeof(ch));
+            ch.version = _LINUX_CAPABILITY_VERSION_3;
+            ch.pid = getpid();
+            memset(&cd[0], 0, sizeof(cd));
+            int caps = CAP_TO_MASK(CAP_NET_RAW)
+              | CAP_TO_MASK(CAP_NET_BROADCAST)
+              | CAP_TO_MASK(CAP_NET_ADMIN);
+            cd[0].permitted = caps;
+            cd[0].effective = caps;
+            if (capset(&ch, &cd[0]) < 0)
+              perror("capset");
+#endif /* __linux__ */
+          }
         else
             LogMsg("WARNING: mdnsd continuing as root because user \"nobody\" does not exist");
     }
