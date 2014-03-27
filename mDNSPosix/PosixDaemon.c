@@ -195,19 +195,42 @@ int main(int argc, char **argv)
      * around it using capabilities instead of remaining root.
      */
     struct __user_cap_header_struct ch;
+    int n = 0;
     struct __user_cap_data_struct cd[2];
 
     memset(&ch, 0, sizeof(ch));
     memset(&cd[1], 0, sizeof(cd[1])); /* Clear above 32 bit capabilities */
-    ch.version = _LINUX_CAPABILITY_VERSION_3;
-    cd[0].permitted = CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
-    cd[0].effective = CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
-    cd[0].inheritable = 0;
-    if (capset(&ch, &cd[0]) < 0)
-      perror("capset");
+    capget(&ch, NULL);
+    switch (ch.version)
+      {
+#ifdef _LINUX_CAPABILITY_VERSION_1
+      case _LINUX_CAPABILITY_VERSION_1:
+        n = _LINUX_CAPABILITY_U32S_1;
+        break;
+#endif /* _LINUX_CAPABILITY_VERSION_1 */
+#ifdef _LINUX_CAPABILITY_VERSION_2
+      case _LINUX_CAPABILITY_VERSION_2:
+        n = _LINUX_CAPABILITY_U32S_2;
+        break;
+#endif /* _LINUX_CAPABILITY_VERSION_2 */
+#ifdef _LINUX_CAPABILITY_VERSION_3
+      case _LINUX_CAPABILITY_VERSION_3:
+        n = _LINUX_CAPABILITY_U32S_3;
+        break;
+#endif /* _LINUX_CAPABILITY_VERSION_3 */
+      }
+    if (!n || n > 2)
+      LogMsg("WARNING: Unknown capability version");
+    else if (capget(&ch, &cd[0]) < 0)
+      perror("capget");
     else
       {
-        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
+        cd[0].permitted |= CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
+        cd[0].effective |= CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
+        cd[0].inheritable = 0;
+        if (capset(&ch, &cd[0]) < 0)
+          perror("capset");
+        else if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
           perror("prctl PR_SET_KEEPCAPS");
       }
 #endif /* __linux__ */
