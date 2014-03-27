@@ -37,6 +37,11 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <sys/types.h>
+#ifdef __linux__
+#include <sys/capability.h> /* !!! We require libcap-dev for this. Oh well. */
+/* prctl is required to enable inheriting of capabilities across setuid */
+#include <sys/prctl.h>
+#endif /* __linux__ */
 
 #if __APPLE__
 #undef daemon
@@ -183,6 +188,28 @@ int main(int argc, char **argv)
         err = udsserver_init(mDNSNULL, 0);
 
     Reconfigure(&mDNSStorage);
+
+#ifdef __linux__
+    /*
+     * SO_BINDTODEVICE is privileged operation; however, we can get
+     * around it using capabilities instead of remaining root.
+     */
+    struct __user_cap_header_struct ch;
+    struct __user_cap_data_struct cd;
+
+    memset(&ch, 0, sizeof(ch));
+    ch.version = _LINUX_CAPABILITY_VERSION;
+    cd.permitted = CAP_TO_MASK(CAP_NET_RAW);
+    cd.effective = CAP_TO_MASK(CAP_NET_RAW);
+    cd.inheritable = 0;
+    if (capset(&ch, &cd) < 0)
+      perror("capset");
+    else
+      {
+        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
+          perror("prctl PR_SET_KEEPCAPS");
+      }
+#endif /* __linux__ */
 
     // Now that we're finished with anything privileged, switch over to running as "nobody"
     if (mStatus_NoError == err)
