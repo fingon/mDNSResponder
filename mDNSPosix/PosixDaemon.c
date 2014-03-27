@@ -229,6 +229,11 @@ int main(int argc, char **argv)
             LogMsg("WARNING: mdnsd continuing as root because user \"nobody\" does not exist");
     }
 
+#ifdef __linux__
+    if (mStatus_NoError == err)
+      err = mDNSPlatformPosixRefreshInterfaceList(&mDNSStorage);
+#endif /* __linux__ */
+
     if (mStatus_NoError == err)
         err = MainLoop(&mDNSStorage);
 

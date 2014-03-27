@@ -1306,8 +1306,12 @@ mDNSexport mStatus mDNSPlatformInit(mDNS *const m)
     if (err == mStatus_NoError) err = SetupSocket(&sa, zeroIPPort, 0, &m->p->unicastSocket6);
 #endif
 
+    // In Linux case, we can't set up sockets with different owner -
+    // it blows up SO_REUSEPORT. So we do this step bit later.
+#ifndef __linux__
     // Tell mDNS core about the network interfaces on this machine.
     if (err == mStatus_NoError) err = SetupInterfaceList(m);
+#endif /* !__linux__ */
 
     // Tell mDNS core about DNS Servers
     mDNS_Lock(m);
