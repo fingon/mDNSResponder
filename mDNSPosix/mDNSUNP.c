@@ -205,7 +205,8 @@ gotError:
     }
 done:
     if (sockfd != -1) {
-        assert(close(sockfd) == 0);
+      int rv = close(sockfd);
+      assert(rv == 0);
     }
     return(ifihead);    /* pointer to first structure in linked list */
 }
