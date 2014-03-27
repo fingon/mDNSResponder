@@ -195,14 +195,15 @@ int main(int argc, char **argv)
      * around it using capabilities instead of remaining root.
      */
     struct __user_cap_header_struct ch;
-    struct __user_cap_data_struct cd;
+    struct __user_cap_data_struct cd[2];
 
     memset(&ch, 0, sizeof(ch));
-    ch.version = _LINUX_CAPABILITY_VERSION;
-    cd.permitted = CAP_TO_MASK(CAP_NET_RAW);
-    cd.effective = CAP_TO_MASK(CAP_NET_RAW);
-    cd.inheritable = 0;
-    if (capset(&ch, &cd) < 0)
+    memset(&cd[1], 0, sizeof(cd[1])); /* Clear above 32 bit capabilities */
+    ch.version = _LINUX_CAPABILITY_VERSION_3;
+    cd[0].permitted = CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
+    cd[0].effective = CAP_TO_MASK(CAP_NET_RAW) | CAP_TO_MASK(CAP_SETUID);
+    cd[0].inheritable = 0;
+    if (capset(&ch, &cd[0]) < 0)
       perror("capset");
     else
       {
