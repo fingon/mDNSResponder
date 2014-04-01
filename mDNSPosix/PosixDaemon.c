@@ -216,9 +216,8 @@ int main(int argc, char **argv)
             ch.version = _LINUX_CAPABILITY_VERSION_3;
             ch.pid = getpid();
             memset(&cd[0], 0, sizeof(cd));
-            int caps = CAP_TO_MASK(CAP_NET_RAW)
-              | CAP_TO_MASK(CAP_NET_BROADCAST)
-              | CAP_TO_MASK(CAP_NET_ADMIN);
+            /* CAP_NET_RAW is required to use SO_BINDTODEVICE */
+            int caps = CAP_TO_MASK(CAP_NET_RAW);
             cd[0].permitted = caps;
             cd[0].effective = caps;
             if (capset(&ch, &cd[0]) < 0)
