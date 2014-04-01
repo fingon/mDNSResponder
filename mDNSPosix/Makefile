@@ -69,7 +69,7 @@ LDSUFFIX = so
 JAVACFLAGS_OS = -fPIC -shared -ldns_sd
 
 # Set up diverging paths for debug vs. prod builds
-DEBUG=0
+DEBUG?=0
 ifeq ($(DEBUG),1)
 CFLAGS_DEBUG = -g -DMDNS_DEBUGMSGS=2 
 OBJDIR = objects/debug
