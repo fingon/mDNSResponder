@@ -61,155 +61,86 @@
 #endif
 
 #if defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
-#include <netdb.h>
-#include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
 
-/* Converts a prefix length to IPv6 network mask */
-void plen_to_mask(int plen, char *addr) {
-    int i;
-    int colons=7; /* Number of colons in IPv6 address */
-    int bits_in_block=16; /* Bits per IPv6 block */
-    for(i=0; i<=colons; i++) {
-        int block, ones=0xffff, ones_in_block;
-        if (plen>bits_in_block) ones_in_block=bits_in_block;
-        else ones_in_block=plen;
-        block = ones & (ones << (bits_in_block-ones_in_block));
-        i==0 ? sprintf(addr, "%x", block) : sprintf(addr, "%s:%x", addr, block);
-        plen -= ones_in_block;
-    }
-}
 
-/* Gets IPv6 interface information from the /proc filesystem in linux*/
-struct ifi_info *get_ifi_info_linuxv6(int family, int doaliases)
+/* Correct way to deal with this is just to use getifaddrs (glibc
+ * 2.3.3+ and various BSDs, but BSDs are 'slightly different' just to
+ * make life interesting). We assume Linux getifaddrs is available,
+ * and if not, please upgrade. */
+struct ifi_info *get_ifi_info_linuxv6(int doaliases)
 {
-    struct ifi_info *ifi, *ifihead, **ifipnext, *ifipold, **ifiptr;
-    FILE *fp;
-    char addr[8][5];
-    int flags, myflags, index, plen, scope;
-    char ifname[9], lastname[IFNAMSIZ];
-    char addr6[32+7+1]; /* don't forget the seven ':' */
-    struct addrinfo hints, *res0;
-    struct sockaddr_in6 *sin6;
-    struct in6_addr *addrptr;
-    int err;
-    int sockfd = -1;
-    struct ifreq ifr;
+  struct ifaddrs *ifap, *ifa;
+  struct ifi_info *ifi = NULL, *head = NULL;
 
-    res0=NULL;
-    ifihead = NULL;
-    ifipnext = &ifihead;
-    lastname[0] = 0;
+  /* doaliases seems always true in the calls in current code */
+  assert(doaliases);
 
-    if ((fp = fopen(PROC_IFINET6_PATH, "r")) != NULL) {
-        sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
-        if (sockfd < 0) {
-            goto gotError;
+  if (getifaddrs(&ifap) < 0)
+    {
+      return NULL;
+    }
+  for (ifa = ifap ; ifa ; ifa = ifa->ifa_next)
+    {
+      /* Care only about IPv6 addresses on non-point-to-point links. */
+      if (!ifa->ifa_addr
+          || ifa->ifa_addr->sa_family != AF_INET6)
+        continue;
+      ifi = calloc(1, sizeof(*ifi));
+      if (!ifi)
+        break;
+      strncpy(ifi->ifi_name, ifa->ifa_name, IFI_NAME);
+      /* We ignore ifi_{haddr,hlen}, everyone else does too */
+      ifi->ifi_flags = ifa->ifa_flags;
+      /* We ignore ifi_myflags; IFI_ALIAS isn't used anywhere */
+      ifi->ifi_index = if_nametoindex(ifa->ifa_name);
+      if (!(ifi->ifi_addr = malloc(sizeof(struct sockaddr_in6))))
+        break;
+      memcpy(ifi->ifi_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+
+      if (ifa->ifa_netmask)
+        {
+          if (!(ifi->ifi_netmask = malloc(sizeof(struct sockaddr_in6))))
+            break;
+          memcpy(ifi->ifi_netmask, ifa->ifa_netmask,
+                 sizeof(struct sockaddr_in6));
         }
-        while (fscanf(fp,
-                      "%4s%4s%4s%4s%4s%4s%4s%4s %02x %02x %02x %02x %8s\n",
-                      addr[0],addr[1],addr[2],addr[3],
-                      addr[4],addr[5],addr[6],addr[7],
-                      &index, &plen, &scope, &flags, ifname) != EOF) {
 
-            myflags = 0;
-            if (strncmp(lastname, ifname, IFNAMSIZ) == 0) {
-                if (doaliases == 0)
-                    continue;   /* already processed this interface */
-                myflags = IFI_ALIAS;
-            }
-            memcpy(lastname, ifname, IFNAMSIZ);
-            ifi = (struct ifi_info*)calloc(1, sizeof(struct ifi_info));
-            if (ifi == NULL) {
-                goto gotError;
-            }
-
-            ifipold   = *ifipnext;       /* need this later */
-            ifiptr    = ifipnext;
-            *ifipnext = ifi;            /* prev points to this new one */
-            ifipnext = &ifi->ifi_next;  /* pointer to next one goes here */
-
-            sprintf(addr6, "%s:%s:%s:%s:%s:%s:%s:%s",
-                    addr[0],addr[1],addr[2],addr[3],
-                    addr[4],addr[5],addr[6],addr[7]);
-
-            /* Add address of the interface */
-            memset(&hints, 0, sizeof(hints));
-            hints.ai_family = AF_INET6;
-            hints.ai_flags = AI_NUMERICHOST;
-            err = getaddrinfo(addr6, NULL, &hints, &res0);
-            if (err) {
-                goto gotError;
-            }
-            ifi->ifi_addr = calloc(1, sizeof(struct sockaddr_in6));
-            if (ifi->ifi_addr == NULL) {
-                goto gotError;
-            }
-            memcpy(ifi->ifi_addr, res0->ai_addr, sizeof(struct sockaddr_in6));
-
-            /* Add netmask of the interface */
-            char ipv6addr[INET6_ADDRSTRLEN];
-            plen_to_mask(plen, ipv6addr);
-            ifi->ifi_netmask = calloc(1, sizeof(struct sockaddr_in6));
-            if (ifi->ifi_addr == NULL) {
-                goto gotError;
-            }
-            sin6=calloc(1, sizeof(struct sockaddr_in6));
-            addrptr=calloc(1, sizeof(struct in6_addr));
-            inet_pton(family, ipv6addr, addrptr);
-            sin6->sin6_family=family;
-            sin6->sin6_addr=*addrptr;
-            sin6->sin6_scope_id=scope;
-            memcpy(ifi->ifi_netmask, sin6, sizeof(struct sockaddr_in6));
-            free(sin6);
+      if (!(ifi->ifi_addr = malloc(sizeof(struct sockaddr_in6))))
+        break;
+      memcpy(ifi->ifi_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
 
 
-            /* Add interface name */
-            memcpy(ifi->ifi_name, ifname, IFI_NAME);
-
-            /* Add interface index */
-            ifi->ifi_index = index;
-
-            /* Add interface flags*/
-            memcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-            if (ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0) {
-                if (errno == EADDRNOTAVAIL) {
-                    /*
-                     * If the main interface is configured with no IP address but
-                     * an alias interface exists with an IP address, you get
-                     * EADDRNOTAVAIL for the main interface
-                     */
-                    free(ifi->ifi_addr);
-                    free(ifi);
-                    ifipnext  = ifiptr;
-                    *ifipnext = ifipold;
-                    continue;
-                } else {
-                    goto gotError;
-                }
-            }
-            ifi->ifi_flags = ifr.ifr_flags;
-            freeaddrinfo(res0);
-            res0=NULL;
+      if (ifa->ifa_flags & IFF_POINTOPOINT && ifa->ifa_dstaddr)
+        {
+          if (!(ifi->ifi_dstaddr = malloc(sizeof(struct sockaddr_in6))))
+            break;
+          memcpy(ifi->ifi_dstaddr, ifa->ifa_dstaddr,
+                 sizeof(struct sockaddr_in6));
         }
+      else if (ifa->ifa_broadaddr)
+        {
+          if (!(ifi->ifi_brdaddr = malloc(sizeof(struct sockaddr_in6))))
+            break;
+          memcpy(ifi->ifi_brdaddr, ifa->ifa_broadaddr,
+                 sizeof(struct sockaddr_in6));
+        }
+      ifi->ifi_next = head;
+      head = ifi;
+      ifi = NULL;
+    };
+  if (ifi)
+    {
+      /* An error occurred. Let's bail out. */
+      ifi->ifi_next = head;
+      free_ifi_info(head);
+      return NULL;
     }
-    goto done;
-
-gotError:
-    if (ifihead != NULL) {
-        free_ifi_info(ifihead);
-        ifihead = NULL;
-    }
-    if (res0 != NULL) {
-        freeaddrinfo(res0);
-        res0=NULL;
-    }
-done:
-    if (sockfd != -1) {
-      int rv = close(sockfd);
-      assert(rv == 0);
-    }
-    return(ifihead);    /* pointer to first structure in linked list */
+  freeifaddrs(ifap);
+  return head;
 }
+
 #endif // defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
 
 struct ifi_info *get_ifi_info(int family, int doaliases)
@@ -230,7 +161,7 @@ struct ifi_info *get_ifi_info(int family, int doaliases)
 #endif
 
 #if defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
-    if (family == AF_INET6) return get_ifi_info_linuxv6(family, doaliases);
+    if (family == AF_INET6) return get_ifi_info_linuxv6(doaliases);
 #endif
 
     sockfd = -1;
