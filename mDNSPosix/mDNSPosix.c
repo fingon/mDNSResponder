@@ -136,7 +136,7 @@ mDNSlocal void SockAddrTomDNSAddr(const struct sockaddr *const sa, mDNSAddr *ipA
 
 // mDNS core calls this routine when it needs to send a packet.
 mDNSexport mStatus mDNSPlatformSendUDP(const mDNS *const m, const void *const msg, const mDNSu8 *const end,
-                                       mDNSInterfaceID InterfaceID, UDPSocket *src, const mDNSAddr *dst, 
+                                       mDNSInterfaceID InterfaceID, UDPSocket *src, const mDNSAddr *dst,
                                        mDNSIPPort dstPort, mDNSBool useBackgroundTrafficClass)
 {
     int err = 0;
@@ -1131,11 +1131,18 @@ mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
         PrintNetLinkMsg(pNLMsg);
 #endif
 
+        // this result isn't used anywhere as a number, just as
+        // non-zero - however, I have seen devices with more than 32
+        // interfaces at some point..
+        // (on Linux, every tunnel increases index for example)
+
         // Process the NetLink message
         if (pNLMsg->nlmsg_type == RTM_GETLINK || pNLMsg->nlmsg_type == RTM_NEWLINK)
-            result |= 1 << ((struct ifinfomsg*) NLMSG_DATA(pNLMsg))->ifi_index;
+          result |= 1;
+        // << ((struct ifinfomsg*) NLMSG_DATA(pNLMsg))->ifi_index;
         else if (pNLMsg->nlmsg_type == RTM_DELADDR || pNLMsg->nlmsg_type == RTM_NEWADDR)
-            result |= 1 << ((struct ifaddrmsg*) NLMSG_DATA(pNLMsg))->ifa_index;
+          result |= 1;
+        // << ((struct ifaddrmsg*) NLMSG_DATA(pNLMsg))->ifa_index;
 
         // Advance pNLMsg to the next message in the buffer
         if ((pNLMsg->nlmsg_flags & NLM_F_MULTI) != 0 && pNLMsg->nlmsg_type != NLMSG_DONE)
@@ -1604,14 +1611,14 @@ mDNSexport mStatus    mDNSPlatformClearSPSMACAddr(void)
 mDNSexport mDNSu16 mDNSPlatformGetUDPPort(UDPSocket *sock)
 {
     (void) sock; // unused
- 
+
     return (mDNSu16)-1;
 }
 
 mDNSexport mDNSBool mDNSPlatformInterfaceIsD2D(mDNSInterfaceID InterfaceID)
 {
     (void) InterfaceID; // unused
-    
+
     return mDNSfalse;
 }
 
