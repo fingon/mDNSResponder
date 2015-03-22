@@ -97,7 +97,8 @@ struct ifi_info {
 };
 
 #if defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
-extern struct ifi_info  *get_ifi_info_linuxv6(int doaliases);
+#define PROC_IFINET6_PATH "/proc/net/if_inet6"
+extern struct ifi_info  *get_ifi_info_linuxv6(int family, int doaliases);
 #endif
 
 #if defined(AF_INET6) && HAVE_IPV6
