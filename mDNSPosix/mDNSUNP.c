@@ -63,6 +63,7 @@
 #if defined(AF_INET6) && HAVE_IPV6 && HAVE_LINUX
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <linux/if_addr.h>
 
 /* Converts a prefix length to IPv6 network mask */
 void plen_to_mask(int plen, char *addr) {
@@ -111,6 +112,7 @@ struct ifi_info *get_ifi_info_linuxv6(int family, int doaliases)
                       addr[4],addr[5],addr[6],addr[7],
                       &index, &plen, &scope, &flags, ifname) != EOF) {
 
+            if (flags & IFA_F_DEPRECATED) continue;
             myflags = 0;
             if (strncmp(lastname, ifname, IFNAMSIZ) == 0) {
                 if (doaliases == 0)
