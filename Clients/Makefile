@@ -30,7 +30,7 @@ TARGETS = build/dns-sd build/dns-sd64
 LIBS =
 else
 TARGETS = build/dns-sd
-LIBS = -L../mDNSPosix/build/prod/ -ldns_sd
+LIBS ?= -L../mDNSPosix/build/prod/ -ldns_sd
 endif
 
 all: $(TARGETS)
