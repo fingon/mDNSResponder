@@ -997,19 +997,14 @@ mDNSlocal int SetupInterfaceList(mDNS *const m)
     int err            = 0;
     struct ifi_info *intfList      = get_ifi_info(AF_INET, mDNStrue);
     struct ifi_info *firstLoopback = NULL;
+    struct ifi_info **p = &intfList;
 
     assert(m != NULL);
     debugf("SetupInterfaceList");
 
-    if (intfList == NULL) err = ENOENT;
-
 #if HAVE_IPV6
-    if (err == 0)       /* Link the IPv6 list to the end of the IPv4 list */
-    {
-        struct ifi_info **p = &intfList;
-        while (*p) p = &(*p)->ifi_next;
-        *p = get_ifi_info(AF_INET6, mDNStrue);
-    }
+    while (*p) p = &(*p)->ifi_next;
+    *p = get_ifi_info(AF_INET6, mDNStrue);
 #endif
 
     if (err == 0)
