@@ -207,6 +207,8 @@ gotError:
         res0=NULL;
     }
 done:
+    if (fp)
+      fclose(fp);
     if (sockfd != -1) {
       int rv = close(sockfd);
       assert(rv == 0);
